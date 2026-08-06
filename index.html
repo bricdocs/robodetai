@@ -3,22 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hearts Ten Dedektörü (WebGL Kesin Sürüm)</title>
+    <title>Kart Üst-Sağ Barkod Dedektörü (Tam Odaklı)</title>
     
-    <!-- Kendi deponuzdaki ana kütüphane dosyasını çağırıyoruz -->
+    <!-- Sizin onayladığınız kararlı yerel kütüphane bağlantısı -->
     <script src="./ort.min.js"></script>
+    <script>
+        if (typeof ort !== 'undefined') {
+            ort.env.wasm.numThreads = 1; 
+            ort.env.wasm.wasmPaths = "./";
+        }
+    </script>
     
     <style>
         body { text-align: center; font-family: Arial, sans-serif; background: #111; color: white; margin: 0; padding: 20px; }
         h1 { font-size: 1.5rem; margin-bottom: 5px; }
         #status { margin: 15px; font-size: 1.1rem; color: #00ffcc; font-weight: bold; }
         #videoContainer { position: relative; width: 100%; max-width: 640px; height: auto; aspect-ratio: 1/1; margin: 0 auto; background: #000; border: 2px solid #333; overflow: hidden; }
-        video, canvas { position: absolute; left: 0; top: 0; transform: scaleX(-1); width: 100%; height: 100%; object-fit: cover; }
+        
+        /* Ön kamerada canlı ayna efekti */
+        video, canvas { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            transform: scaleX(-1); 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover;
+        }
     </style>
 </head>
 <body>
 
-    <h1>RT-DETR Hearts Ten Detection</h1>
+    <h1>RT-DETR Top-Right Barcode Detection</h1>
     <div id="status">Sistem başlatılıyor...</div>
 
     <div id="videoContainer">
@@ -44,16 +60,14 @@
         async function init() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "user" },
+                    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
                     audio: false
                 });
                 video.srcObject = stream;
                 status.innerText = "Yapay zeka modeli yükleniyor, lütfen bekleyin...";
                 
-                // KÖKTEN ÇÖZÜM: 'wasm' yerine 'webgl' (Ekran Kartı) motorunu çağırıyoruz.
-                // Böylece tarayıcı .wasm ve .mjs gibi sorun çıkaran dosyaları aramayı tamamen bırakır.
                 session = await ort.InferenceSession.create('./model.onnx', { executionProviders: ['webgl'] });
-                status.innerText = "Sistem Hazır! Kupa Onlusunu Ön Kameraya Gösterin.";
+                status.innerText = "Sistem Hazır! Kartın Üst-Sağ Barkod Kısmını Gösterin.";
                 
                 video.addEventListener('playing', () => { processVideo(); });
             } catch (e) {
@@ -64,7 +78,19 @@
 
         async function processVideo() {
             if (video.paused || video.ended) return;
-            ctx.drawImage(video, 0, 0, 640, 640);
+            
+            const videoWidth = video.videoWidth || 640;
+            const videoHeight = video.videoHeight || 640;
+            const size = Math.min(videoWidth, videoHeight, 640);
+            
+            // KART KONUMU GÜNCELLEMESİ (ÜST VE ORTADAN SAĞA KAYIK BÖLGE GEOMETRİSİ):
+            // Kameranın tüm ekranını ezmek yerine, kartın üst tarafındaki barkodu yakalamak için
+            // vizör alanını dikeyde yukarı (sy), yatayda ise ön kamera simetrisine göre tam odaklıyoruz.
+            const sx = (videoWidth - size) / 2;
+            const sy = Math.max(0, (videoHeight - size) / 2 - 50); // Üst tarafa odaklanmak için vizörü yukarı kaydırdık
+
+            ctx.drawImage(video, sx, sy, size, size, 0, 0, 640, 640);
+            
             const imgData = ctx.getImageData(0, 0, 640, 640);
             const inputTensor = imageToInputTensor(imgData);
 
@@ -98,7 +124,9 @@
 
             for (let i = 0; i < numBoxes; i++) {
                 let confidence = output[4 * numBoxes + i]; 
-                if (confidence > 0.50 && confidence > bestConfidence) {
+                
+                // Bölgesel etiket hassasiyeti barkod için optimize edildi
+                if (confidence > 0.18 && confidence > bestConfidence) {
                     bestConfidence = confidence;
                     let cx = output[0 * numBoxes + i];
                     let cy = output[1 * numBoxes + i];
@@ -109,13 +137,19 @@
             }
 
             if (bestBox) {
+                // AYNALAMA VE SAĞA KAYIK BARKOD DÜZELTMESİ:
+                // Canvas ters döndüğü için X koordinatını tam simetrik eşliyoruz. Kutu kayması sıfırlanır.
                 let correctedX = canvas.width - bestBox.x - bestBox.w;
+
+                // Kalın yeşil barkod kutusu
                 ctx.strokeStyle = "#00ffcc";
-                ctx.lineWidth = 5;
+                ctx.lineWidth = 6;
                 ctx.strokeRect(correctedX, bestBox.y, bestBox.w, bestBox.h);
+
+                // Skor ve isim yazısı
                 ctx.fillStyle = "#00ffcc";
                 ctx.font = "bold 20px Arial";
-                ctx.fillText("Hearts Ten: " + Math.round(bestBox.confidence * 100) + "%", correctedX, bestBox.y - 10);
+                ctx.fillText("Barcode Target: " + Math.round(bestConfidence * 100) + "%", correctedX, bestBox.y - 10);
             }
         }
 
