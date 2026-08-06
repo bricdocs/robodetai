@@ -4,14 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hearts Ten Dedektörü (Ön Kamera)</title>
-    <!-- ONNX Runtime Web kütüphanesi -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.20.0/ort.min.js"></script>
-    <!-- 2. Tarayıcıya arka plandaki WebAssembly dosyalarının yerini gösteren zorunlu tamamlayıcı kod -->
+
+<!-- 1. Kendi bulduğunuz %100 doğru jsDelivr CDN linki -->
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.0/dist/ort.min.js"></script>
+
+<!-- 2. Tarayıcının arka plandaki WebAssembly (.wasm) motorunu jsDelivr üzerinden bulmasını sağlayan kod -->
 <script>
     if (typeof ort !== 'undefined') {
-        ort.env.wasm.wasmPaths = "https://cdnjs.cloudflare.com/ajax/libs/onnxruntime-web/1.20.0/ort.min.js";
+        // En sondaki eğik çizgiye ( / ) dikkat edin, dosyaların birbirine yapışmasını engeller
+        ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.0/dist/";
     }
 </script>
+
+
     <style>
         body { text-align: center; font-family: Arial, sans-serif; background: #111; color: white; margin: 0; padding: 20px; }
         h1 { font-size: 1.5rem; margin-bottom: 5px; }
