@@ -5,16 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hearts Ten Dedektörü (Yerel Sürüm)</title>
     
-    <!-- KÖKTEN ÇÖZÜM: İnternetteki bozuk jsDelivr linkini tamamen çöpe attık.  -->
-    <!-- Tarayıcı yapay zekayı artık kendi deponuza yüklediğiniz temiz dosyadan okuyacak. -->
+    <!-- Kendi deponuzdaki ana kütüphane dosyasını çağırıyoruz -->
     <script src="./ort.min.js"></script>
 
     <script>
-        // Tarayıcının internete gidip sapıtmasını engellemek için tüm yolları 
-        // kendi GitHub klasörünüze (./) kilitliyoruz.
+        // MIME VE ALT KLASÖR HATALARINI KÖKTEN ÇÖZEN NİHAİ DÜZELTME:
+        // Tarayıcının 'robodetai/' alt klasörü içinde kaybolmasını engellemek için,
+        // yüklediğiniz motor dosyasının tam ve doğrudan GitHub Pages internet linkini veriyoruz.
         if (typeof ort !== 'undefined') {
-            ort.env.wasm.numThreads = 1; 
-            ort.env.wasm.wasmPaths = "./";
+            ort.env.wasm.numThreads = 1; // Çoklu iş parçacığı karmaşasını kapatır
+            ort.env.wasm.wasmPaths = "https://bricdocs.github.io/robodetai/";
         }
     </script>
     
@@ -60,7 +60,7 @@
                 video.srcObject = stream;
                 status.innerText = "Yapay zeka modeli yükleniyor, lütfen bekleyin...";
                 
-                // Model ve motor artık tamamen kendi klasörünüzden (GitHub Pages) çağrılıyor
+                // Modelinizi kendi klasörünüzden güvenle çağırır
                 session = await ort.InferenceSession.create('./model.onnx', { executionProviders: ['wasm'] });
                 status.innerText = "Sistem Hazır! Kupa Onlusunu Ön Kameraya Gösterin.";
                 
@@ -88,12 +88,6 @@
             }
             requestAnimationFrame(processVideo);
         }
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && video.srcObject) {
-                video.play().catch(err => console.log("Kamera oynatılamadı:", err));
-            }
-        });
 
         function imageToInputTensor(imgData) {
             const floatData = new Float32Array(3 * 640 * 640);
@@ -138,4 +132,3 @@
     </script>
 </body>
 </html>
-
