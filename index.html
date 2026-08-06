@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hearts Ten Dedektörü (Yerel Sürüm)</title>
+    
+    <!-- KÖKTEN ÇÖZÜM: İnternetteki bozuk jsDelivr linkini tamamen çöpe attık. -->
+    <!-- Tarayıcı yapay zekayı artık kendi deponuza yüklediğiniz temiz dosyadan okuyacak. -->
+    <script src="./ort.min.js"></script>
+
+    <script>
+        // Tarayıcının internete gidip sapıtmasını engellemek için tüm yolları 
+        // kendi GitHub klasörünüze (./) kilitliyoruz.
+        if (typeof ort !== 'undefined') {
+            ort.env.wasm.numThreads = 1; 
+            ort.env.wasm.wasmPaths = "./";
+        }
+    </script>
+    
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; background: #111; color: white; margin: 0; padding: 20px; }
+        h1 { font-size: 1.5rem; margin-bottom: 5px; }
+        #status { margin: 15px; font-size: 1.1rem; color: #00ffcc; font-weight: bold; }
+        #videoContainer { position: relative; width: 100%; max-width: 640px; height: auto; aspect-ratio: 1/1; margin: 0 auto; background: #000; border: 2px solid #333; overflow: hidden; }
+        video, canvas { position: absolute; left: 0; top: 0; transform: scaleX(-1); width: 100%; height: 100%; object-fit: cover; }
+    </style>
+</head>
+<body>
+
+    <h1>RT-DETR Hearts Ten Detection</h1>
+    <div id="status">Sistem başlatılıyor...</div>
+
+    <div id="videoContainer">
+        <video id="webcam" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+        <canvas id="outputCanvas" width="640" height="640"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('outputCanvas');
+        const ctx = canvas.getContext('2d');
+        const status = document.getElementById('status');
+        let session;
+
+        async function checkAndInit() {
+            if (typeof ort === 'undefined') {
+                status.innerText = "Hata: Yapay zeka motoru (ort.min.js) deponuzda bulunamadı.";
+                return;
+            }
+            await init();
+        }
+
+        async function init() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "user" },
+                    audio: false
+                });
+                video.srcObject = stream;
+                status.innerText = "Yapay zeka modeli yükleniyor, lütfen bekleyin...";
+                
+                // Model ve motor artık tamamen kendi klasörünüzden (GitHub Pages) çağrılıyor
+                session = await ort.InferenceSession.create('./model.onnx', { executionProviders: ['wasm'] });
+                status.innerText = "Sistem Hazır! Kupa Onlusunu Ön Kameraya Gösterin.";
+                
+                video.addEventListener('playing', () => { processVideo(); });
+            } catch (e) {
+                status.innerText = "Yükleme Hatası: " + e.message;
+                console.error(e);
+            }
+        }
+
+        async function processVideo() {
+            if (video.paused || video.ended) return;
+            ctx.drawImage(video, 0, 0, 640, 640);
+            const imgData = ctx.getImageData(0, 0, 640, 640);
+            const inputTensor = imageToInputTensor(imgData);
+
+            try {
+                const feeds = {};
+                feeds[session.inputNames] = inputTensor;
+                const outputMap = await session.run(feeds);
+                const output = outputMap[session.outputNames].data;
+                parseYOLOv8Output(output);
+            } catch (error) {
+                console.error("Tahmin hatası:", error);
+            }
+            requestAnimationFrame(processVideo);
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && video.srcObject) {
+                video.play().catch(err => console.log("Kamera oynatılamadı:", err));
+            }
+        });
+
+        function imageToInputTensor(imgData) {
+            const floatData = new Float32Array(3 * 640 * 640);
+            let rIndex = 0, gIndex = 640 * 640, bIndex = 2 * 640 * 640;
+            for (let i = 0; i < imgData.data.length; i += 4) {
+                floatData[rIndex++] = imgData.data[i] / 255.0;
+                floatData[gIndex++] = imgData.data[i + 1] / 255.0;
+                floatData[bIndex++] = imgData.data[i + 2] / 255.0;
+            }
+            return new ort.Tensor('float32', floatData,);
+        }
+
+        function parseYOLOv8Output(output) {
+            const numBoxes = 8400;
+            let bestConfidence = 0;
+            let bestBox = null;
+
+            for (let i = 0; i < numBoxes; i++) {
+                let confidence = output[4 * numBoxes + i]; 
+                if (confidence > 0.50 && confidence > bestConfidence) {
+                    bestConfidence = confidence;
+                    let cx = output[0 * numBoxes + i];
+                    let cy = output[1 * numBoxes + i];
+                    let w = output[2 * numBoxes + i];
+                    let h = output[3 * numBoxes + i];
+                    bestBox = { x: cx - w / 2, y: cy - h / 2, w, h, confidence };
+                }
+            }
+
+            if (bestBox) {
+                let correctedX = canvas.width - bestBox.x - bestBox.w;
+                ctx.strokeStyle = "#00ffcc";
+                ctx.lineWidth = 5;
+                ctx.strokeRect(correctedX, bestBox.y, bestBox.w, bestBox.h);
+                ctx.fillStyle = "#00ffcc";
+                ctx.font = "bold 20px Arial";
+                ctx.fillText("Hearts Ten: " + Math.round(bestBox.confidence * 100) + "%", correctedX, bestBox.y - 10);
+            }
+        }
+
+        window.onload = checkAndInit;
+    </script>
+</body>
+</html>
