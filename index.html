@@ -12,7 +12,9 @@
         // tam GitHub Pages internet yolunu buraya kilitliyoruz.
         if (typeof ort !== 'undefined') {
             ort.env.wasm.numThreads = 1; // Çoklu çekirdek karmaşasını önler
-            ort.env.wasm.wasmPaths = "https://github.io";
+            
+            ort.env.wasm.wasmPaths = "./"; //  DÜZELDİ (Aynı klasördeki yerel dosyayı okur)
+
         }
     </script>
     
