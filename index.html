@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 25 -->
+<!-- BRIC BARKOD - VERSIYON 26 -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V25)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V26)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -27,7 +27,7 @@
 </head>
 <body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-4 select-none">
 
-    <!-- GİZLİ BÖLÜCÜ PANEL (Sadece 33 MB'lık modeli yazılımsız saf iki parçaya ayırmak için bir kez kullanılacak) -->
+    <!-- GİZLİ BÖLÜCÜ PANEL (Aynen Korundu) -->
     <div class="mb-4 p-4 bg-gray-800 rounded-xl border border-gray-700 text-xs w-full max-w-xl">
         <p class="text-yellow-400 font-bold mb-2">💡 GİZLİ SAF BÖLÜCÜ ARAÇ:</p>
         <p class="mb-2 text-gray-400">Orijinal 33 MB'lık tam <span class="text-white font-semibold">model.onnx</span> dosyanı seç, WinRAR olmadan saf iki parça olarak bilgisayarına indir.</p>
@@ -70,27 +70,23 @@
         let lastSmoothBox = null;
         const smoothingFactor = 0.75; 
 
-        // G GİZLİ ARACIN ÇALIŞMA MANTIĞI (WinRAR Başlıklarını Yok Eden Saf Parçalayıcı)
+        // Gizli Parçalayıcı Tetikleyici (Aynen Korundu)
         document.getElementById('modelSplitterInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
+            const file = e.target.files;
             if (!file) return;
             const reader = new FileReader();
             reader.onload = function(evt) {
                 const buffer = evt.target.result;
                 const totalBytes = buffer.byteLength;
                 const halfBytes = Math.floor(totalBytes / 2);
-                
-                // Hiçbir WinRAR/ZIP kodu eklemeden saf byte dizilerini ikiye bölüyoruz
                 const part1Data = buffer.slice(0, halfBytes);
                 const part2Data = buffer.slice(halfBytes, totalBytes);
                 
-                // Parça 1'i bilgisayarına indirir
                 const link1 = document.createElement('a');
                 link1.href = URL.createObjectURL(new Blob([part1Data], {type: "application/octet-stream"}));
                 link1.download = "model.raw.001";
                 link1.click();
                 
-                // Parça 2'yi bilgisayarına indirir
                 setTimeout(() => {
                     const link2 = document.createElement('a');
                     link2.href = URL.createObjectURL(new Blob([part2Data], {type: "application/octet-stream"}));
@@ -177,7 +173,7 @@
             }
         });
 
-        // SAF BYTE BİRLEŞTİRİCİ SÜRÜCÜ MOTORU
+        // HEDEF: 33 MB'lık modelin gerçek gizli çıktı katman boyutunu konsola yazdıran fonksiyon
         async function loadModel() {
             try {
                 statusDiv.innerText = "Saf Byte Parçası 1 Yükleniyor...";
@@ -188,9 +184,6 @@
                 const response2 = await fetch('./model.raw.002');
                 const arrayBuffer2 = await response2.arrayBuffer();
                 
-                statusDiv.innerText = "Yazılımsız 33 MB Orijinal Matris Birleştiriliyor...";
-                
-                // İki saf byte verisi araya hiçbir WinRAR kodu girmeden tam uç uca yapıştırılıyor
                 const combinedBuffer = new Uint8Array(arrayBuffer1.byteLength + arrayBuffer2.byteLength);
                 combinedBuffer.set(new Uint8Array(arrayBuffer1), 0);
                 combinedBuffer.set(new Uint8Array(arrayBuffer2), arrayBuffer1.byteLength);
@@ -199,10 +192,20 @@
                 session = await ort.InferenceSession.create(combinedBuffer, { 
                     executionProviders: ['wasm']
                 });
+
+                // --- MİLYON DOLARLIK GİZLİ MATRİS BOYUTU LOGU EKLEDİK ---
+                console.log("==========================================");
+                console.log("🤖 BRIC AI MODEL MATRİS ANALİZ RAPORU:");
+                session.outputNames.forEach(name => {
+                    const outputMeta = session.outputInfo[name];
+                    console.log(`📌 Çıktı Katmanı İsmi: "${name}" -> Gerçek Boyutu (Output Shape):`, outputMeta.dims);
+                });
+                console.log("==========================================");
+
                 statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Canlı AI Aktif';
             } catch (err) {
-                console.warn("Model parçaları şu an depoda bulunamadı veya ilk ayrıştırma adımı bekleniyor:", err);
-                statusDiv.innerText = "Saf Parçalar (.raw.001/.raw.002) Bekleniyor...";
+                console.warn(err);
+                statusDiv.innerText = "Saf Parçalar Bekleniyor...";
             }
         }
 
