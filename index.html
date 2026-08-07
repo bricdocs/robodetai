@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 26 -->
+<!-- BRIC BARKOD - VERSIYON 28 -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V26)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V28)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -32,6 +32,12 @@
         <p class="text-yellow-400 font-bold mb-2">💡 GİZLİ SAF BÖLÜCÜ ARAÇ:</p>
         <p class="mb-2 text-gray-400">Orijinal 33 MB'lık tam <span class="text-white font-semibold">model.onnx</span> dosyanı seç, WinRAR olmadan saf iki parça olarak bilgisayarına indir.</p>
         <input type="file" id="modelSplitterInput" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"/>
+    </div>
+
+    <!-- MATRİS RAPORUNU DOĞRUDAN GÖREBİLMEN İÇİN EKLENEN PANEL -->
+    <div id="matrixReportBox" class="mb-4 p-4 bg-blue-950/80 rounded-xl border border-blue-500/50 text-xs w-full max-w-xl text-blue-300 hidden font-mono">
+        <p class="text-green-400 font-bold mb-1">📊 CANLI MATRİS ANALİZ SONUCU:</p>
+        <div id="matrixContent" class="whitespace-pre-wrap break-all text-white bg-black/40 p-2 rounded border border-black/20 mt-2">...</div>
     </div>
 
     <div class="relative w-full max-w-xl bg-gray-800 rounded-2xl overflow-hidden shadow-2xl border border-gray-700">
@@ -173,7 +179,7 @@
             }
         });
 
-        // HEDEF: 33 MB'lık modelin gerçek gizli çıktı katman boyutunu konsola yazdıran fonksiyon
+        // HEDEF: Boyutları ekrana doğrudan, okunaklı düz metin olarak kazıyan analiz motoru
         async function loadModel() {
             try {
                 statusDiv.innerText = "Saf Byte Parçası 1 Yükleniyor...";
@@ -193,14 +199,16 @@
                     executionProviders: ['wasm']
                 });
 
-                // --- MİLYON DOLARLIK GİZLİ MATRİS BOYUTU LOGU EKLEDİK ---
-                console.log("==========================================");
-                console.log("🤖 BRIC AI MODEL MATRİS ANALİZ RAPORU:");
+                let htmlReport = `Giriş Kapısı: "${session.inputNames}"\n`;
+                
                 session.outputNames.forEach(name => {
                     const outputMeta = session.outputInfo[name];
-                    console.log(`📌 Çıktı Katmanı İsmi: "${name}" -> Gerçek Boyutu (Output Shape):`, outputMeta.dims);
+                    const shapeStr = outputMeta && outputMeta.dims ? `[${outputMeta.dims.join(', ')}]` : "Okunamadı";
+                    htmlReport += `Çıkış Kapısı: "${name}" -> Gerçek Boyutu: ${shapeStr}\n`;
                 });
-                console.log("==========================================");
+
+                document.getElementById('matrixReportBox').classList.remove('hidden');
+                document.getElementById('matrixContent').innerText = htmlReport;
 
                 statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Canlı AI Aktif';
             } catch (err) {
@@ -290,8 +298,8 @@
             const data = outputTensor.data;
             const dims = outputTensor.dims;
             
-            const numAttributes = dims; 
-            const numBoxes = dims; 
+            const numAttributes = dims[1]; 
+            const numBoxes = dims[2]; 
 
             let highestScore = 0;
             let bestBox = null;
@@ -342,12 +350,12 @@
 
             try {
                 const inputTensor = preprocess(video, modelInputWidth, modelInputHeight);
-                const inputName = session.inputNames;
+                const inputName = session.inputNames[0];
                 const feeds = {};
                 feeds[inputName] = inputTensor;
 
                 const outputs = await session.run(feeds);
-                const outputName = session.outputNames;
+                const outputName = session.outputNames[0];
                 const outputTensor = outputs[outputName];
 
                 const bestBox = parseYOLOv8Output(outputTensor, canvas.width, canvas.height);
