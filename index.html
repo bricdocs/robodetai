@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 8 -->
+<!-- BRIC BARKOD - VERSIYON 9 -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V8)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V9)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -20,6 +20,7 @@
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     
     <style>
+        /* Görüntü kozmetik olarak düz (Aynalama tamamen kapalı) */
         video, canvas {
             transform: scaleX(1);
         }
@@ -43,6 +44,7 @@
         </button>
     </div>
 
+    <!-- 2. ANA YAPAY ZEKA VE KAMERA MOTORU SCRIPT BLOKU -->
     <script>
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('overlay');
@@ -52,17 +54,21 @@
         
         let session = null;
         let currentStream = null;
-        
-        // TALEP: Varsayılan olarak ilk açılışta ÖN KAMERA (user) seçildi!
-        let currentFacingMode = 'user'; 
+        let currentFacingMode = 'user'; // Varsayılan olarak ön kamera (user) devrede
         
         const modelInputWidth = 640;
         const modelInputHeight = 640;
 
+        // BÜYÜMA DARBOĞAZINI ÇÖZEN GLOBAL CANVAS TANIMLAMALARI (Hafıza sızıntısı bitirildi)
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = modelInputWidth;
+        tempCanvas.height = modelInputHeight;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
         let lastSmoothBox = null;
         const smoothingFactor = 0.55; 
 
-        // Kamera Kurulum Motoru
+        // Kamera Kurulumu
         async function setupCamera() {
             if (currentStream) {
                 currentStream.getTracks().forEach(track => track.stop());
@@ -96,11 +102,9 @@
 
             return new Promise((resolve) => {
                 video.onloadedmetadata = async () => {
-                    // ROI KUTUSUNUN GERİ GELMESİ İÇİN BOYUT ATAMALARI EN TEPEYE ALINDI
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
 
-                    // Arka kameraya geçildiğinde uzaklığı engellemek için Zoom uygula
                     if (currentFacingMode === 'environment') {
                         try {
                             const videoTrack = stream.getVideoTracks();
@@ -115,7 +119,6 @@
                         }
                     }
 
-                    // Sistemde birden fazla kamera var mı kontrol et (Buton görünürlüğü)
                     try {
                         const devices = await navigator.mediaDevices.enumerateDevices();
                         const videoDevices = devices.filter(device => device.kind === 'videoinput');
@@ -131,11 +134,10 @@
             });
         }
 
-        // Kamera Değiştirme Tetikleyicisi
+        // Kamera Değiştirme Buton Tıklaması
         switchCamBtn.addEventListener('click', async () => {
             currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
             statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-yellow-400 animate-ping"></span> Kamera Değiştiriliyor...';
-            
             try {
                 await setupCamera();
                 statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Canlı AI Aktif';
@@ -144,6 +146,7 @@
             }
         });
 
+        // Model Yükleme
         async function loadModel() {
             try {
                 session = await ort.InferenceSession.create('./model.onnx', { executionProviders: ['wasm'] });
@@ -154,13 +157,9 @@
             }
         }
 
-        // Resmin en-boy oranını bozmadan 640x640 matrise sığdırma (Letterbox Pad)
+        // Saniyede onlarca kez canvas oluşturmayı engelleyen, sabit hafızalı hızlı preprocess fonksiyonu
         function preprocess(videoFrame, targetWidth, targetHeight) {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = targetWidth;
-            tempCanvas.height = targetHeight;
-            const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-            
+            // Siyah arka plan üzerine ortalayarak çiz (Letterbox)
             tempCtx.fillStyle = "black";
             tempCtx.fillRect(0, 0, targetWidth, targetHeight);
 
@@ -197,7 +196,7 @@
             return new ort.Tensor('float32', floatData, [1, 3, targetWidth, targetHeight]);
         }
 
-        // Büyük Sıçramalı Mıknatıs Efektli Çizim Motoru
+        // Parlak Yeşil ROI Çizim Motoru
         function drawBoundingBox(targetBox) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
@@ -229,8 +228,8 @@
         // Kararlı Güven Filtreli YOLOv8 Çözümleme Formülü
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data;
-            const numAttributes = outputTensor.dims; 
-            const numBoxes = outputTensor.dims; 
+            const numAttributes = outputTensor.dims[1]; 
+            const numBoxes = outputTensor.dims[2]; 
 
             let highestScore = 0;
             let bestBox = null;
@@ -266,6 +265,7 @@
             return bestBox;
         }
 
+        // Ana İşlem Döngüsü
         async function processVideo() {
             if (video.paused || video.ended || !session) {
                 requestAnimationFrame(processVideo);
@@ -274,12 +274,12 @@
 
             try {
                 const inputTensor = preprocess(video, modelInputWidth, modelInputHeight);
-                const inputName = session.inputNames;
+                const inputName = session.inputNames[0];
                 const feeds = {};
                 feeds[inputName] = inputTensor;
 
                 const outputs = await session.run(feeds);
-                const outputName = session.outputNames;
+                const outputName = session.outputNames[0];
                 const outputTensor = outputs[outputName];
 
                 const bestBox = parseYOLOv8Output(outputTensor, canvas.width, canvas.height);
@@ -292,6 +292,7 @@
             requestAnimationFrame(processVideo);
         }
 
+        // Başlatıcı
         async function main() {
             try {
                 await setupCamera();
