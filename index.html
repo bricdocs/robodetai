@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 22 -->
+<!-- BRIC BARKOD - VERSIYON 24 -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V22)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V24)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -139,19 +139,19 @@
             }
         });
 
-        // TALEP: Yüklediğin model.part1.rar ve model.part2.rar dosyalarını tanıyan birleştirici motor
+        // TALEP: model.z01 ve model.zip isim şablonuna göre ham baytları birleştiren motor
         async function loadModel() {
             try {
                 statusDiv.innerText = "Model Parçası 1 İndiriliyor...";
-                const response1 = await fetch('./model.part1.rar');
+                const response1 = await fetch('./model.z01');
                 const blob1 = await response1.blob();
                 
                 statusDiv.innerText = "Model Parçası 2 İndiriliyor...";
-                const response2 = await fetch('./model.part2.rar');
+                const response2 = await fetch('./model.zip');
                 const blob2 = await response2.blob();
                 
-                statusDiv.innerText = "33 MB Orijinal Matris Birleştiriliyor...";
-                // İki parça ham veri tarayıcı hafızasında uç uca ekleniyor
+                statusDiv.innerText = "33 MB Sıkıştırılmamış Matris Birleştiriliyor...";
+                // Önemli: WinRAR çoklu cilt mantığında z01 önde, .zip arkada uç uca eklenmelidir
                 const combinedBlob = new Blob([blob1, blob2], { type: 'application/octet-stream' });
                 const modelDataBuffer = await combinedBlob.arrayBuffer();
 
@@ -162,7 +162,7 @@
                 statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Canlı AI Aktif';
             } catch (err) {
                 console.error("Hafıza birleştirme hatası:", err);
-                statusDiv.innerText = "RAR Parçaları (.part1.rar / .part2.rar) Bulunamadı!";
+                statusDiv.innerText = "ZIP Parçaları (.z01 / .zip) Depoda Bulunamadı!";
             }
         }
 
