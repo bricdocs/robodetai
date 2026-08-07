@@ -1,11 +1,22 @@
-<!-- BRIC BARKOD - VERSIYON 13 -->
+<!-- BRIC BARKOD - VERSIYON 14 -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V13)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V14)</title>
     
+    <!-- GITHUB ACTIONS VE FIREBASE ENGELİNİ AŞAN JAVASCRIPT ISOLATION MOTORU -->
+    <script>
+        // Eğer tarayıcı izole modda değilse, sunucu başlıklarına ihtiyaç duymadan kendini izole moda zorlar
+        if (window.crossOriginIsolated === false && window.self === window.top && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.register(window.location.href, { scope: '/' }).then(function() {
+                // Sayfayı izole mod tetikleyicisiyle yeniden yükler
+                if (performance.navigation.type !== 1) { window.location.reload(); }
+            });
+        }
+    </script>
+
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
         var onnx_part1 = "https://" + "cdn.js" + "delivr.net/npm/";
@@ -20,7 +31,6 @@
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     
     <style>
-        /* Görüntü kozmetik olarak düz (Aynalama tamamen kapalı) */
         video, canvas {
             transform: scaleX(1);
         }
@@ -32,19 +42,16 @@
         <video id="webcam" autoplay playsinline muted class="w-full h-auto block"></video>
         <canvas id="overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
         
-        <!-- Dinamik Durum Paneli -->
         <div id="status" class="absolute top-4 left-4 bg-black/70 px-4 py-2 rounded-full text-xs font-semibold tracking-wider flex items-center gap-2 border border-green-500/50 text-green-400 z-10">
             <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
             Canlı AI Aktif
         </div>
 
-        <!-- Kamera Değiştirme Butonu -->
         <button id="switchCamBtn" class="hidden absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-lg border border-blue-400/30 tracking-wide transition-all z-10 items-center gap-1.5 cursor-pointer">
             🔄 Kamera Değiştir
         </button>
     </div>
 
-    <!-- 2. ANA YAPAY ZEKA VE KAMERA MOTORU SCRIPT BLOKU -->
     <script>
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('overlay');
@@ -58,8 +65,6 @@
         
         const modelInputWidth = 640;
         const modelInputHeight = 640;
-
-        // Modelinizdeki gerçek kart isimleri dizisi (İstediğiniz zaman genişletebilirsiniz)
         const classNames = ["Maca_As", "Karo_Papaz", "Kupa_Kiz", "Sinek_Vale"]; 
 
         const tempCanvas = document.createElement('canvas');
@@ -70,7 +75,6 @@
         let lastSmoothBox = null;
         const smoothingFactor = 0.75; 
 
-        // Kamera Kurulumu
         async function setupCamera() {
             if (currentStream) {
                 currentStream.getTracks().forEach(track => track.stop());
@@ -147,10 +151,8 @@
             }
         });
 
-        // Model Yükleyici (Firefox Uyarısını Kıran Çok Çekirdekli Yapı)
         async function loadModel() {
             try {
-                // firebase.json üzerinden COOP/COEP başlıkları açıldığında bu satır uçuşa geçecek!
                 session = await ort.InferenceSession.create('./model.onnx', { 
                     executionProviders: ['wasm'],
                     numThreads: Math.min(4, navigator.hardwareConcurrency || 2) 
@@ -162,7 +164,6 @@
             }
         }
 
-        // Letterbox Önişleme
         function preprocess(videoFrame, targetWidth, targetHeight) {
             tempCtx.fillStyle = "black";
             tempCtx.fillRect(0, 0, targetWidth, targetHeight);
@@ -200,7 +201,6 @@
             return new ort.Tensor('float32', floatData, [1, 3, targetWidth, targetHeight]);
         }
 
-        // TALEP: % Skor ve Kart ID/İsim Etiketleri Net ve Sabit Şekilde Geri Getirildi
         function drawBoundingBox(targetBox) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
@@ -220,7 +220,6 @@
                 lastSmoothBox = { ...targetBox };
             }
 
-            // 1. Parlak Yeşil ROI Çerçevesi
             ctx.strokeStyle = '#00FF00';
             ctx.lineWidth = 4;
             ctx.shadowBlur = 15;
@@ -231,22 +230,18 @@
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // 2. ROI Üstüne Okunabilir Sabit Etiket Çizimi (Yarı Saydam Siyah Arka Plan)
             const text = `${lastSmoothBox.label} (%${Math.round(lastSmoothBox.score * 100)})`;
             ctx.font = 'bold 15px sans-serif';
             const textMetrics = ctx.measureText(text);
             const textWidth = textMetrics.width;
             
-            // Etiket Kutusu Tasarımı
-            ctx.fillStyle = 'rgba(0, 255, 0, 0.9)'; // Parlak yeşil blok
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.9)'; 
             ctx.fillRect(lastSmoothBox.x - 2, lastSmoothBox.y - 26, textWidth + 12, 24);
 
-            // Yazı Tasarımı
-            ctx.fillStyle = '#000000'; // Net okunması için siyah yazı
+            ctx.fillStyle = '#000000'; 
             ctx.fillText(text, lastSmoothBox.x + 4, lastSmoothBox.y - 9);
         }
 
-        // Nokta Atışı Koordinat Oranlayıcı ve Çoklu Sınıf Çözümleyicisi
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data;
             const dims = outputTensor.dims;
@@ -256,7 +251,7 @@
 
             let highestScore = 0;
             let bestBox = null;
-            const scoreThreshold = 0.38; // Kararlı algılama eşiği
+            const scoreThreshold = 0.38; 
 
             const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
             const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
@@ -266,7 +261,6 @@
                 let classScore = 0;
                 let classId = -1;
                 
-                // Sabit ID:0 hatasını bitiren çoklu sınıf (class score) arama döngüsü
                 for (let j = 4; j < numAttributes; j++) {
                     const score = data[j * numBoxes + i];
                     if (score > classScore) {
@@ -283,7 +277,6 @@
                     let w  = data[2 * numBoxes + i];
                     let h  = data[3 * numBoxes + i];
 
-                    // 3-4 cm'lik sapmayı tamamen nötrleyen oran tamamlama formülü
                     const actualX = ((cx - (w / 2)) - xOffset) / scale;
                     const actualY = ((cy - (h / 2)) - yOffset) / scale;
                     const actualW = w / scale;
@@ -317,7 +310,7 @@
                 drawBoundingBox(bestBox);
 
             } catch (err) {
-                // Konsolun kilitlenmesini önlemek için logları sınırla
+                // Hata yönetim alanı
             }
 
             requestAnimationFrame(processVideo);
