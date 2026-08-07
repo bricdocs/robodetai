@@ -1,9 +1,10 @@
+<!-- BRIC BARKOD - VERSIYON 8 -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V8)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -36,7 +37,7 @@
             Canlı AI Aktif
         </div>
 
-        <!-- Kamera Değiştirme Butonu (Modern Tasarım - Varsayılan Olarak Gizli, Mobilde Açılır) -->
+        <!-- Kamera Değiştirme Butonu -->
         <button id="switchCamBtn" class="hidden absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-lg border border-blue-400/30 tracking-wide transition-all z-10 items-center gap-1.5 cursor-pointer">
             🔄 Kamera Değiştir
         </button>
@@ -51,8 +52,9 @@
         
         let session = null;
         let currentStream = null;
-        // Başlangıçta arka kamerayı hedefle (environment). Butona basıldığında 'user' (ön kamera) olacak.
-        let currentFacingMode = 'environment'; 
+        
+        // TALEP: Varsayılan olarak ilk açılışta ÖN KAMERA (user) seçildi!
+        let currentFacingMode = 'user'; 
         
         const modelInputWidth = 640;
         const modelInputHeight = 640;
@@ -60,9 +62,8 @@
         let lastSmoothBox = null;
         const smoothingFactor = 0.55; 
 
-        // Kamera Kurulumu (Ön/Arka Geçiş ve Akış Sıfırlama Destekli)
+        // Kamera Kurulum Motoru
         async function setupCamera() {
-            // Eğer halihazırda açık bir kamera varsa, çakışmayı önlemek için önce onu tamamen kapatıyoruz
             if (currentStream) {
                 currentStream.getTracks().forEach(track => track.stop());
             }
@@ -95,13 +96,14 @@
 
             return new Promise((resolve) => {
                 video.onloadedmetadata = async () => {
+                    // ROI KUTUSUNUN GERİ GELMESİ İÇİN BOYUT ATAMALARI EN TEPEYE ALINDI
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
 
-                    // Arka kameradayken uzaklığı engellemek için Zoom uygula (Ön kamerada zoom genellikle desteklenmez)
+                    // Arka kameraya geçildiğinde uzaklığı engellemek için Zoom uygula
                     if (currentFacingMode === 'environment') {
                         try {
-                            const videoTrack = stream.getVideoTracks()[0];
+                            const videoTrack = stream.getVideoTracks();
                             const capabilities = videoTrack.getCapabilities();
                             if (capabilities.zoom) {
                                 await videoTrack.applyConstraints({
@@ -113,12 +115,12 @@
                         }
                     }
 
-                    // Sistemde birden fazla kamera var mı kontrol et (Varsa butonu görünür yap)
+                    // Sistemde birden fazla kamera var mı kontrol et (Buton görünürlüğü)
                     try {
                         const devices = await navigator.mediaDevices.enumerateDevices();
                         const videoDevices = devices.filter(device => device.kind === 'videoinput');
                         if (videoDevices.length > 1) {
-                            switchCamBtn.style.display = 'flex'; // Butonu göster
+                            switchCamBtn.style.display = 'flex';
                         }
                     } catch (e) {
                         console.warn("Cihaz listesi alınamadı:", e);
@@ -131,7 +133,6 @@
 
         // Kamera Değiştirme Tetikleyicisi
         switchCamBtn.addEventListener('click', async () => {
-            // Aktif modu tersine çevir (environment <-> user)
             currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
             statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-yellow-400 animate-ping"></span> Kamera Değiştiriliyor...';
             
@@ -152,6 +153,7 @@
                 statusDiv.innerText = "Model Dosyası Bulunamadı!";
             }
         }
+
         // Resmin en-boy oranını bozmadan 640x640 matrise sığdırma (Letterbox Pad)
         function preprocess(videoFrame, targetWidth, targetHeight) {
             const tempCanvas = document.createElement('canvas');
