@@ -12,10 +12,10 @@
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
         document.write('<script src="' + onnx_part1 + onnx_part2 + '"><\/script>');
 
-        // Tailwind CSS v4 - Doğru ve Kararlı Çalışan Resmi Play CDN Adresi
+        // Tailwind CSS v4 - Kaçış karakter hatası tamamen düzeltilmiş düz dize formatı
         var tw_part1 = "https://" + "cdn.js" + "delivr.net/npm/@tail";
-        var tw_part2 = "windcss/br" + "owser@4"><\/script>";
-        document.write('<script src="' + tw_part1 + tw_part2);
+        var tw_part2 = "windcss/br" + "owser@4";
+        document.write('<script src="' + tw_part1 + tw_part2 + '"><\/script>');
     </script>
 
     <!-- Favicon 404 Konsol Uyarısını Susturan Hat -->
@@ -55,12 +55,13 @@
         const modelInputWidth = 640;
         const modelInputHeight = 640;
 
-        // Kamera Kurulumu (Gelişmiş Güvenli Fallback Mekanizmalı)
+        // Kamera Kurulumu (Donanımsal Kilitlenmeleri Kıran Ham Yapı)
         async function setupCamera() {
-            // Çözünürlük ve nesne zorlamasını kaldırarak aşamalı deneme düzeni
+            // Cihazın her koşulda kamerayı bırakması için aşamalı en geniş esneklik havuzu
             const constraintsOptions = [
-                { video: { facingMode: 'environment' }, audio: false }, 
-                { video: true, audio: false } 
+                { video: { facingMode: { ideal: 'environment' } }, audio: false },
+                { video: { facingMode: 'environment' }, audio: false },
+                { video: true, audio: false }
             ];
 
             let stream = null;
@@ -78,7 +79,7 @@
 
             if (!stream) {
                 console.error("Tüm kamera açma varyasyonları başarısız oldu:", lastError);
-                statusDiv.innerText = "Kamera Başlatılamadı! Kamera izinlerini kontrol edin.";
+                statusDiv.innerText = "Kamera Donanımı Kilitli! Cihazı veya sekmeleri kapatıp açın.";
                 statusDiv.className = "absolute top-4 left-4 bg-red-600 px-4 py-2 rounded-full text-xs font-bold text-white border border-red-800";
                 throw lastError;
             }
