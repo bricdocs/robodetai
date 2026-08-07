@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 30 -->
+<!-- BRIC BARKOD - VERSIYON 31 -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V30)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V31)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -28,10 +28,10 @@
 </head>
 <body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-4 select-none">
 
-    <!-- GİZLİ BÖLÜCÜ PANEL (Aynen Korundu) -->
+    <!-- GİZLİ SAF BÖLÜCÜ ARAÇ: Bilgisayarında bir kez kullanıp saf parçaları indirmek için buraya yerleştirdim -->
     <div class="mb-4 p-4 bg-gray-800 rounded-xl border border-gray-700 text-xs w-full max-w-xl">
-        <p class="text-yellow-400 font-bold mb-2">💡 GİZLİ SAF BÖLÜCÜ ARAÇ:</p>
-        <p class="mb-2 text-gray-400">Orijinal 33 MB'lık tam <span class="text-white font-semibold">model.onnx</span> dosyanı seç, WinRAR olmadan saf iki parça olarak bilgisayarına indir.</p>
+        <p class="text-yellow-400 font-bold mb-2">💡 GİZLİ SAF BÖLÜCÜ SÜRÜCÜ ARAÇ:</p>
+        <p class="mb-2 text-gray-400">Orijinal 33 MB'lık tam <span class="text-white font-semibold">model.onnx</span> dosyanı seç, WinRAR olmadan saf iki parça (.txt) olarak bilgisayarına otomatik indir.</p>
         <input type="file" id="modelSplitterInput" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"/>
     </div>
 
@@ -42,7 +42,7 @@
         <!-- Dinamik Durum Paneli -->
         <div id="status" class="absolute top-4 left-4 bg-black/70 px-4 py-2 rounded-full text-xs font-semibold tracking-wider flex items-center gap-2 border border-green-500/50 text-green-400 z-10">
             <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
-            Model Parçaları Birleştiriliyor...
+            Saf Parçalar Bekleniyor...
         </div>
 
         <!-- Kamera Değiştirme Butonu -->
@@ -73,33 +73,38 @@
         let lastSmoothBox = null;
         const smoothingFactor = 0.75; 
 
-        // Gizli Parçalayıcı Tetikleyici (Aynen Korundu)
+        // GİZLİ SÜRÜCÜ ARACIN ÇALIŞMA MANTIĞI: Dosya ID'sine ve baytlarına hiçbir arşiv etiket kodu bulaştırmaz!
         document.getElementById('modelSplitterInput').addEventListener('change', function(e) {
-            const file = e.target.files;
+            const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = function(evt) {
                 const buffer = evt.target.result;
                 const totalBytes = buffer.byteLength;
                 const halfBytes = Math.floor(totalBytes / 2);
+                
+                // Hiçbir WinRAR/ZIP kodu eklemeden saf byte dizilerini ikiye bölüyoruz
                 const part1Data = buffer.slice(0, halfBytes);
                 const part2Data = buffer.slice(halfBytes, totalBytes);
                 
+                // Parça 1'i doğrudan model1.txt olarak bilgisayarına indirir
                 const link1 = document.createElement('a');
                 link1.href = URL.createObjectURL(new Blob([part1Data], {type: "application/octet-stream"}));
-                link1.download = "model.raw.001";
+                link1.download = "model1.txt";
                 link1.click();
                 
+                // Parça 2'yi doğrudan model2.txt olarak bilgisayarına indirir
                 setTimeout(() => {
                     const link2 = document.createElement('a');
                     link2.href = URL.createObjectURL(new Blob([part2Data], {type: "application/octet-stream"}));
-                    link2.download = "model.raw.002";
+                    link2.download = "model2.txt";
                     link2.click();
                 }, 1000);
             };
             reader.readAsArrayBuffer(file);
         });
 
+        // Kamera Kurulumu
         async function setupCamera() {
             if (currentStream) {
                 currentStream.getTracks().forEach(track => track.stop());
@@ -176,33 +181,33 @@
             }
         });
 
-        // ÇÖKEN SATIRLARI TEMİZLEYEN %100 KARARLI VE HIZLI MODEL YÜKLEYİCİ
+        // SAF BYTE SÜRÜCÜ MOTORU: Arşiv kalıntısı olmadan saf birleştirme yapar
         async function loadModel() {
             try {
-                statusDiv.innerText = "MIME Filtresi Deliniyor (Parça 1)...";
+                statusDiv.innerText = "Saf Byte Parçası 1 Yükleniyor...";
                 const response1 = await fetch('./model1.txt');
                 const arrayBuffer1 = await response1.arrayBuffer();
                 
-                statusDiv.innerText = "MIME Filtresi Deliniyor (Parça 2)...";
+                statusDiv.innerText = "Saf Byte Parçası 2 Yükleniyor...";
                 const response2 = await fetch('./model2.txt');
                 const arrayBuffer2 = await response2.arrayBuffer();
                 
-                statusDiv.innerText = "33 MB Saf Byte Zinciri Birleştiriliyor...";
+                statusDiv.innerText = "Yazılımsız 33 MB Orijinal Matris Birleştiriliyor...";
+                
+                // İki saf byte verisi araya hiçbir WinRAR kodu girmeden tam uç uca yapıştırılıyor
                 const combinedBuffer = new Uint8Array(arrayBuffer1.byteLength + arrayBuffer2.byteLength);
                 combinedBuffer.set(new Uint8Array(arrayBuffer1), 0);
                 combinedBuffer.set(new Uint8Array(arrayBuffer2), arrayBuffer1.byteLength);
 
                 statusDiv.innerText = "Yapay Zeka Belleğe Alınıyor...";
-                
-                // Kilitlenme yaratan outputInfo uyarısı tamamen temizlenerek saf WASM motoru kuruldu
                 session = await ort.InferenceSession.create(combinedBuffer, { 
                     executionProviders: ['wasm']
                 });
 
                 statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Canlı AI Aktif';
             } catch (err) {
-                console.error("Kritik yükleme hatası:", err);
-                statusDiv.innerText = "Model Parçaları Sunucudan Çekilemedi!";
+                console.warn("Model parçaları şu an depoda bulunamadı veya ilk ayrıştırma adımı bekleniyor:", err);
+                statusDiv.innerText = "Saf Parçalar (.txt) Bekleniyor...";
             }
         }
 
@@ -283,13 +288,13 @@
             ctx.fillText(text, lastSmoothBox.x + 4, lastSmoothBox.y - 9);
         }
 
-        // DİNAMİK MATRİS MOTORU: session.outputInfo bağımlılığı tamamen yok edildi!
+        // AKILLI MATRİS MOTORU: session.outputInfo bağımlılığı tamamen yok edildi!
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data;
+            const dims = outputTensor.dims;
             
-            // Model çıktısının toplam uzunluğu üzerinden kutu ve sınıf sayısını otomatik türetir
             const totalElements = data.length;
-            const numBoxes = 8400; // Standart YOLOv8/RT-DETR 640x640 için sabit kutu frekansı
+            const numBoxes = 8400; // Standart YOLOv8 frekansı
             const numAttributes = Math.floor(totalElements / numBoxes); 
 
             let highestScore = 0;
@@ -300,7 +305,6 @@
             const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
             const yOffset = (modelInputHeight - canvasHeight * scale) / 2;
 
-            // Eğer veriler hatalı veya boş geldiyse döngüyü korumaya al
             if (numAttributes <= 4 || totalElements === 0) return null;
 
             for (let i = 0; i < numBoxes; i++) {
