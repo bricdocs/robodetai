@@ -1,13 +1,11 @@
-<!-- BRIC BARKOD - VERSIYON 18 -->
+<!-- BRIC BARKOD - VERSIYON 19 -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V18)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V19)</title>
     
-    <!-- TÜM RİSKLİ VE GÜVENSİZ BULUNAN SERVICE WORKER KODLARI TAMAMEN TEMİZLENDİ -->
-
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
         var onnx_part1 = "https://" + "cdn.js" + "delivr.net/npm/";
@@ -61,8 +59,7 @@
         const modelInputWidth = 640;
         const modelInputHeight = 640;
 
-        // Modelinizdeki gerçek kart isimleri dizisi
-        const classNames = ["Maca_As", "Karo_Papaz", "Kupa_Kiz", "Sinek_Vale"]; 
+        // DÖNGÜYÜ KİLİTLEN KATI SINIF BAĞIMLILIĞI TAMAMEN KALDIRILDI!
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = modelInputWidth;
@@ -152,7 +149,6 @@
         // Hatalardan Arındırılmış Standart Model Yükleyici
         async function loadModel() {
             try {
-                // Tarayıcı kısıtlamalarına takılmayan en güvenli standart yükleme modu
                 session = await ort.InferenceSession.create('./model.onnx', { 
                     executionProviders: ['wasm']
                 });
@@ -163,7 +159,7 @@
             }
         }
 
-            // Letterbox Önişleme
+        // Letterbox Önişleme
         function preprocess(videoFrame, targetWidth, targetHeight) {
             tempCtx.fillStyle = "black";
             tempCtx.fillRect(0, 0, targetWidth, targetHeight);
@@ -244,17 +240,17 @@
             ctx.fillText(text, lastSmoothBox.x + 4, lastSmoothBox.y - 9);
         }
 
-        // Kararlı Çoklu Sınıf Çözümleyici Motoru
+        // Sınıf Bağımsız Kararlı YOLOv8 Çözümleyici Motoru (Matematik Sıfırlandı)
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data;
             const dims = outputTensor.dims;
             
-            const numAttributes = dims; 
-            const numBoxes = dims; 
+            const numAttributes = dims[1]; 
+            const numBoxes = dims[2]; 
 
             let highestScore = 0;
             let bestBox = null;
-            const scoreThreshold = 0.38; 
+            const scoreThreshold = 0.35; // Kararlı algılama filtresi
 
             const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
             const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
@@ -264,6 +260,7 @@
                 let classScore = 0;
                 let classId = -1;
                 
+                // Matris boyut çakışmalarını engelleyen saf skorsal tarama adımı
                 for (let j = 4; j < numAttributes; j++) {
                     const score = data[j * numBoxes + i];
                     if (score > classScore) {
@@ -285,7 +282,8 @@
                     const actualW = w / scale;
                     const actualH = h / scale;
 
-                    const finalLabel = (classNames && classNames[classId]) ? classNames[classId] : `Sınıf ID: ${classId}`;
+                    // Sınıf listesine bakmaksızın sadece modelin ürettiği ham kimliği (ID) basar
+                    const finalLabel = `Sınıf ID: ${classId}`;
 
                     bestBox = { x: actualX, y: actualY, w: actualW, h: actualH, label: finalLabel, score: classScore };
                 }
@@ -301,19 +299,19 @@
 
             try {
                 const inputTensor = preprocess(video, modelInputWidth, modelInputHeight);
-                const inputName = session.inputNames;
+                const inputName = session.inputNames[0];
                 const feeds = {};
                 feeds[inputName] = inputTensor;
 
                 const outputs = await session.run(feeds);
-                const outputName = session.outputNames;
+                const outputName = session.outputNames[0];
                 const outputTensor = outputs[outputName];
 
                 const bestBox = parseYOLOv8Output(outputTensor, canvas.width, canvas.height);
                 drawBoundingBox(bestBox);
 
             } catch (err) {
-                // Hataları sessizce geç
+                // Kilitlenmeleri sıfırlamak için sessiz geçiş
             }
 
             requestAnimationFrame(processVideo);
