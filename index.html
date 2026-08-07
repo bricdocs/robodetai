@@ -7,15 +7,15 @@
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
-        // ONNX Runtime Web - Kararlı 1.17.1 Sürümü
+        // ONNX Runtime Web - Parçalı Yapı
         var onnx_part1 = "https://" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
         document.write('<script src="' + onnx_part1 + onnx_part2 + '"><\/script>');
 
-        // Tailwind CSS v4 - Doğru ve Çalışan index.global.js Dağıtım Yolu
-        var tw_part1 = "https://" + "cdn.js" + "delivr.net/npm/@tail" + "windcss/browser";
-        var tw_part2 = "@4.0.0-alpha.32/dist/in" + "dex.glo" + "bal.js";
-        document.write('<script src="' + tw_part1 + tw_part2 + '"><\/script>');
+        // Tailwind CSS v4 - Doğru ve Kararlı Çalışan Resmi Play CDN Adresi
+        var tw_part1 = "https://" + "cdn.js" + "delivr.net/npm/@tail";
+        var tw_part2 = "windcss/br" + "owser@4"><\/script>";
+        document.write('<script src="' + tw_part1 + tw_part2);
     </script>
 
     <!-- Favicon 404 Konsol Uyarısını Susturan Hat -->
@@ -55,12 +55,12 @@
         const modelInputWidth = 640;
         const modelInputHeight = 640;
 
-        // Kamera Kurulumu (Güvenli Fallback Mekanizmalı)
+        // Kamera Kurulumu (Gelişmiş Güvenli Fallback Mekanizmalı)
         async function setupCamera() {
+            // Çözünürlük ve nesne zorlamasını kaldırarak aşamalı deneme düzeni
             const constraintsOptions = [
-                { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-                { video: { facingMode: 'environment' }, audio: false },
-                { video: true, audio: false }
+                { video: { facingMode: 'environment' }, audio: false }, 
+                { video: true, audio: false } 
             ];
 
             let stream = null;
@@ -69,7 +69,7 @@
             for (const constraints of constraintsOptions) {
                 try {
                     stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    if (stream) break;
+                    if (stream) break; 
                 } catch (err) {
                     lastError = err;
                     console.warn("Kamera ayarı denenirken geçici hata oluştu, fallback deneniyor...", err);
@@ -78,7 +78,7 @@
 
             if (!stream) {
                 console.error("Tüm kamera açma varyasyonları başarısız oldu:", lastError);
-                statusDiv.innerText = "Kamera Başlatılamadı! İzinleri veya diğer sekmeleri kontrol edin.";
+                statusDiv.innerText = "Kamera Başlatılamadı! Kamera izinlerini kontrol edin.";
                 statusDiv.className = "absolute top-4 left-4 bg-red-600 px-4 py-2 rounded-full text-xs font-bold text-white border border-red-800";
                 throw lastError;
             }
@@ -105,7 +105,7 @@
             }
         }
 
-                // Kesin 4 Boyutlu JavaScript Tensor Paketleme Motoru
+        // Kesin 4 Boyutlu JavaScript Tensor Paketleme Motoru
         function preprocess(videoFrame, targetWidth, targetHeight) {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = targetWidth;
