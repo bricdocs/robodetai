@@ -120,7 +120,8 @@
             }
 
             if (bestBox) {
-                let correctedX = bestBox.x;
+                let correctedX = canvas.width - bestBox.x - bestBox.w;
+
                 ctx.strokeStyle = "#00ffcc";
                 ctx.lineWidth = 6;
                 ctx.strokeRect(correctedX, bestBox.y, bestBox.w, bestBox.h);
