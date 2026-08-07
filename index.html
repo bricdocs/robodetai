@@ -5,14 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bric Barkod - Real-Time AI Scanner</title>
     
-    <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ (BAĞIMSIZ BLOK) -->
+    <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
+        // ONNX Runtime Web - Kararlı 1.17.1 Sürümü
         var onnx_part1 = "https://" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
         document.write('<script src="' + onnx_part1 + onnx_part2 + '"><\/script>');
 
-        var tw_part1 = "https://" + "cdn.js" + "delivr.net/npm/@tail" + "windcss/";
-        var tw_part2 = "brow" + "ser@4.0.0/dist/in" + "dex.glo" + "bal.js";
+        // Tailwind CSS v4 - Doğru ve Çalışan index.global.js Dağıtım Yolu
+        var tw_part1 = "https://" + "cdn.js" + "delivr.net/npm/@tail" + "windcss/browser";
+        var tw_part2 = "@4.0.0-alpha.32/dist/in" + "dex.glo" + "bal.js";
         document.write('<script src="' + tw_part1 + tw_part2 + '"><\/script>');
     </script>
 
@@ -53,26 +55,42 @@
         const modelInputWidth = 640;
         const modelInputHeight = 640;
 
-        // Arka Kamera Kurulumu
+        // Kamera Kurulumu (Güvenli Fallback Mekanizmalı)
         async function setupCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-                    audio: false
-                });
-                video.srcObject = stream;
-                return new Promise((resolve) => {
-                    video.onloadedmetadata = () => {
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                        resolve();
-                    };
-                });
-            } catch (err) {
-                console.error("Kamera başlatılamadı:", err);
-                statusDiv.innerText = "Kamera Hatası!";
-                statusDiv.className = "absolute top-4 left-4 bg-red-600 px-4 py-2 rounded-full text-xs font-bold text-white border border-red-800";
+            const constraintsOptions = [
+                { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+                { video: { facingMode: 'environment' }, audio: false },
+                { video: true, audio: false }
+            ];
+
+            let stream = null;
+            let lastError = null;
+
+            for (const constraints of constraintsOptions) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    if (stream) break;
+                } catch (err) {
+                    lastError = err;
+                    console.warn("Kamera ayarı denenirken geçici hata oluştu, fallback deneniyor...", err);
+                }
             }
+
+            if (!stream) {
+                console.error("Tüm kamera açma varyasyonları başarısız oldu:", lastError);
+                statusDiv.innerText = "Kamera Başlatılamadı! İzinleri veya diğer sekmeleri kontrol edin.";
+                statusDiv.className = "absolute top-4 left-4 bg-red-600 px-4 py-2 rounded-full text-xs font-bold text-white border border-red-800";
+                throw lastError;
+            }
+
+            video.srcObject = stream;
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    resolve();
+                };
+            });
         }
 
         // ONNX Yapay Zeka Modelini Belleğe Alma (bric-barkod Firebase Kök Dizini)
@@ -87,7 +105,7 @@
             }
         }
 
-        // Kesin 4 Boyutlu JavaScript Tensor Paketleme Motoru [1, 3, 640, 640]
+                // Kesin 4 Boyutlu JavaScript Tensor Paketleme Motoru
         function preprocess(videoFrame, targetWidth, targetHeight) {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = targetWidth;
@@ -206,9 +224,13 @@
 
         // Başlatıcı
         async function main() {
-            await setupCamera();
-            await loadModel();
-            processVideo();
+            try {
+                await setupCamera();
+                await loadModel();
+                processVideo();
+            } catch (e) {
+                console.error("Sistem başlatılamadı:", e);
+            }
         }
 
         window.addEventListener('DOMContentLoaded', main);
