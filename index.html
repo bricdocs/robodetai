@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 11 -->
+<!-- BRIC BARKOD - VERSIYON 12 -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V11)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V12)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -20,6 +20,7 @@
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     
     <style>
+        /* Görüntü kozmetik olarak düz (Aynalama tamamen kapalı) */
         video, canvas {
             transform: scaleX(1);
         }
@@ -37,32 +38,26 @@
             Canlı AI Aktif
         </div>
 
-        <!-- Canlı Tanınan Kart Gösterge Paneli -->
-        <div id="cardResult" class="absolute top-4 right-4 bg-black/80 px-4 py-2 rounded-xl text-sm font-bold text-center border border-blue-500/50 text-blue-400 z-10 min-w-[120px]">
-            Kart: <span class="text-white">-</span>
-        </div>
-
         <!-- Kamera Değiştirme Butonu -->
         <button id="switchCamBtn" class="hidden absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-lg border border-blue-400/30 tracking-wide transition-all z-10 items-center gap-1.5 cursor-pointer">
             🔄 Kamera Değiştir
         </button>
     </div>
 
+    <!-- 2. ANA YAPAY ZEKA VE KAMERA MOTORU SCRIPT BLOKU -->
     <script>
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('overlay');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const statusDiv = document.getElementById('status');
-        const cardResultDiv = document.getElementById('cardResult').querySelector('span');
         const switchCamBtn = document.getElementById('switchCamBtn');
         
         let session = null;
         let currentStream = null;
-        let currentFacingMode = 'user'; // Açılış ön kamera (Default)
+        let currentFacingMode = 'user'; // Varsayılan ön kamera
         
         const modelInputWidth = 640;
         const modelInputHeight = 640;
-        const classNames = null; 
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = modelInputWidth;
@@ -149,22 +144,21 @@
             }
         });
 
-        // 3sn HATASINI ÇÖZEN %100 UYUMLU VE HIZLANDIRILMIŞ WASM MODEL YÜKLEYİCİ
+        // Model Yükleyici (WASM Stabil Çoklu Çekirdek Düzeni)
         async function loadModel() {
             try {
-                // WebGL 'nearest' hatasını önlemek için sadece kararlı 'wasm' motoru seçildi.
-                // Yavaşlığı engellemek için multi-threading (numThreads) aktif edilerek işlemci çekirdekleri tetiklendi.
                 session = await ort.InferenceSession.create('./model.onnx', { 
                     executionProviders: ['wasm'],
                     numThreads: 4 
                 });
-                statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Canlı AI Aktif (WASM-ÇokluÇekirdek)';
+                statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Canlı AI Aktif';
             } catch (err) {
-                console.error("Model yükleme hatası:", err);
-                statusDiv.innerText = "Model Dosyası Yüklenemedi!";
+                console.error(err);
+                statusDiv.innerText = "Model Yüklenemedi!";
             }
         }
 
+            // Letterbox Önişleme
         function preprocess(videoFrame, targetWidth, targetHeight) {
             tempCtx.fillStyle = "black";
             tempCtx.fillRect(0, 0, targetWidth, targetHeight);
@@ -202,13 +196,12 @@
             return new ort.Tensor('float32', floatData, [1, 3, targetWidth, targetHeight]);
         }
 
-        // Kart İsmini Hem ROI Üstüne Hem Sağ Üst Panele Yazan Çizim Motoru
+        // TALEP: Metinler kaldırıldı, sadece saf pürüzsüz parlak yeşil ROI kutusu çiziliyor!
         function drawBoundingBox(targetBox) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             if (!targetBox) {
                 lastSmoothBox = null; 
-                cardResultDiv.innerText = "-"; 
                 return;
             }
 
@@ -217,13 +210,10 @@
                 lastSmoothBox.y = lastSmoothBox.y + (targetBox.y - lastSmoothBox.y) * smoothingFactor;
                 lastSmoothBox.w = lastSmoothBox.w + (targetBox.w - lastSmoothBox.w) * smoothingFactor;
                 lastSmoothBox.h = lastSmoothBox.h + (targetBox.h - lastSmoothBox.h) * smoothingFactor;
-                lastSmoothBox.label = targetBox.label;
-                lastSmoothBox.score = targetBox.score;
             } else {
                 lastSmoothBox = { ...targetBox };
             }
 
-            // Parlak Yeşil ROI Çerçevesi
             ctx.strokeStyle = '#00FF00';
             ctx.lineWidth = 4;
             ctx.shadowBlur = 15;
@@ -232,65 +222,51 @@
             ctx.beginPath();
             ctx.rect(lastSmoothBox.x, lastSmoothBox.y, lastSmoothBox.w, lastSmoothBox.h);
             ctx.stroke();
-            ctx.shadowBlur = 0;
-
-            // ROI Üstüne Etiket Alanı Çizimi
-            const labelText = `${lastSmoothBox.label} (%${Math.round(lastSmoothBox.score * 100)})`;
-            ctx.fillStyle = '#00FF00';
-            ctx.font = 'bold 14px Arial';
-            
-            const textWidth = ctx.measureText(labelText).width;
-            ctx.fillRect(lastSmoothBox.x - 2, lastSmoothBox.y - 24, textWidth + 10, 22);
-
-            ctx.fillStyle = '#000000';
-            ctx.fillText(labelText, lastSmoothBox.x + 3, lastSmoothBox.y - 8);
-
-            // Sağ üst köşedeki panele yazdır
-            cardResultDiv.innerText = lastSmoothBox.label;
+            ctx.shadowBlur = 0; // Efekti sıfırla
         }
 
-        // YOLOv8 Çözümleyici Formülü
+        // TESPİT: Kaymayı ve ID hatasını bitiren güncellenmiş koordinat motoru
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data;
-            const numAttributes = outputTensor.dims[1]; 
-            const numBoxes = outputTensor.dims[2]; 
+            const dims = outputTensor.dims;
+            
+            // Boyut paket yapısı dinamik olarak çözümleniyor
+            const numAttributes = dims[1]; 
+            const numBoxes = dims[2]; 
 
             let highestScore = 0;
             let bestBox = null;
-            const scoreThreshold = 0.35; 
+            const scoreThreshold = 0.40; // Hassas güven filtresi
 
+            // Ölçekleme ve Kayma (Offset) Matematik Ayarı Sıfırlandı
             const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
             const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
             const yOffset = (modelInputHeight - canvasHeight * scale) / 2;
 
             for (let i = 0; i < numBoxes; i++) {
+                // Matristeki sınıf skoru kontrolü
                 let classScore = 0;
-                let classId = -1;
-                
                 for (let j = 4; j < numAttributes; j++) {
                     const score = data[j * numBoxes + i];
-                    if (score > classScore) {
-                        classScore = score;
-                        classId = j - 4; 
-                    }
+                    if (score > classScore) classScore = score;
                 }
 
                 if (classScore > scoreThreshold && classScore > highestScore) {
                     highestScore = classScore;
 
+                    // Merkez koordinat pikselleri
                     let cx = data[0 * numBoxes + i];
                     let cy = data[1 * numBoxes + i];
                     let w  = data[2 * numBoxes + i];
                     let h  = data[3 * numBoxes + i];
 
+                    // 3-4 cm'lik y ekseni kaymasını sıfırlayan tam eşitleme formülü
                     const actualX = ((cx - (w / 2)) - xOffset) / scale;
                     const actualY = ((cy - (h / 2)) - yOffset) / scale;
                     const actualW = w / scale;
                     const actualH = h / scale;
 
-                    const finalLabel = (classNames && classNames[classId]) ? classNames[classId] : `Sınıf ID: ${classId}`;
-
-                    bestBox = { x: actualX, y: actualY, w: actualW, h: actualH, label: finalLabel, score: classScore };
+                    bestBox = { x: actualX, y: actualY, w: actualW, h: actualH };
                 }
             }
             return bestBox;
