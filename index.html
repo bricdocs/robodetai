@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 37 (DİNAMİK MATRİS MOTORU - TAM DÜZELTİLMEDİR) -->
+<!-- BRIC BARKOD - VERSIYON 38 (SAF SAYISAL MATRİS MOTORU) -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V37)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V38)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -143,7 +143,7 @@
         // DOĞRUDAN TEK PARÇA 5.9 MB SAF MODELİ OKUYAN YÜKLEYİCİ
         async function loadModel() {
             try {
-                statusDiv.innerText = "5.9 MB Sürüm 37 Saf Model Okunuyor...";
+                statusDiv.innerText = "5.9 MB Sürüm 38 Saf Model Okunuyor...";
                 
                 // Hiçbir kısıtlamaya takılmayan tertemiz WASM motoru
                 session = await ort.InferenceSession.create('./model.onnx', { 
@@ -224,7 +224,7 @@
             ctx.fillText(text, targetBox.x + 4, targetBox.y - 9);
         }
 
-        // SÜRÜM 37: Kesin Çözüm Dinamik Matris Filtre Motoru
+        // SÜRÜM 38: Saf Sayısal Matris Filtre Motoru (Kesin Çözüm)
         let matchCounter = 0;
         let lastDetectedCard = null;
         const REQUIRED_FRAMES = 2; 
@@ -232,7 +232,7 @@
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data; 
             const numBoxes = 8400; 
-            const scoreThreshold = 0.40; // İndis krizini tamamen çözmek için barajı %40'a çektik
+            const scoreThreshold = 0.40; // Hassas kalpleri kaçırmamak için %40 eşiği
 
             const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
             const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
@@ -241,30 +241,27 @@
             let detectedRanks = [];
             let detectedSuits = [];
 
-            // Roboflow/YOLOv8 sınıf sıralama esnekliği için etiket eşleme tablosu
-            const classMap = { 0: "3", 1: "8", 2: "Heart" };
-
             for (let i = 0; i < numBoxes; i++) {
-                // 3 sınıflı model çıktısında katman 4, 5 ve 6'yı tarıyoruz
-                for (let c = 0; c < 3; c++) {
-                    const score = data[(4 + c) * numBoxes + i];
-                    
-                    if (score > scoreThreshold) {
-                        const label = classMap[c];
-                        const box = getBoxData(data, i, scale, xOffset, yOffset, label, score, c);
-                        
-                        if (c === 0 || c === 1) {
-                            detectedRanks.push(box);
-                        } else if (c === 2) {
-                            detectedSuits.push(box);
-                        }
-                    }
+                // Katman 4, 5 ve 6'dan ham skor verilerini çekiyoruz
+                const s0 = data[4 * numBoxes + i]; // Sınıf 0: '3'
+                const s1 = data[5 * numBoxes + i]; // Sınıf 1: '8'
+                const s2 = data[6 * numBoxes + i]; // Sınıf 2: 'Heart'
+
+                // Güvenlik kalkanı: Skor eşiğini geçenleri sayısal ID'sine göre ayır
+                if (s0 > scoreThreshold && s0 > s1 && s0 > s2) {
+                    detectedRanks.push(getBoxData(data, i, scale, xOffset, yOffset, "3", s0, 0));
+                }
+                if (s1 > scoreThreshold && s1 > s0 && s1 > s2) {
+                    detectedRanks.push(getBoxData(data, i, scale, xOffset, yOffset, "8", s1, 1));
+                }
+                if (s2 > scoreThreshold && s2 > s0 && s2 > s1) {
+                    detectedSuits.push(getBoxData(data, i, scale, xOffset, yOffset, "Heart", s2, 2));
                 }
             }
 
-            // TEŞHİS RADARI: Dinamik katman taramasının sonucunu izleyyoruz
+            // TEŞHİS RADARI V38: Kalp krizinin çözülüp çözülmediğini gösterir
             if (detectedRanks.length > 0 || detectedSuits.length > 0) {
-                console.log(`[RADAR-V37] Rakam: ${detectedRanks.length}, Kalp: ${detectedSuits.length}`);
+                console.log(`[RADAR-V38] Rakam Sayısı: ${detectedRanks.length}, Kalp Sayısı: ${detectedSuits.length}`);
             }
 
             if (detectedRanks.length === 0 || detectedSuits.length === 0) {
@@ -272,14 +269,15 @@
                 return null;
             }
 
-            // En yüksek skorluları başa getir
+            // En yüksek skorlu ilk elemanları çekmek için sırala
             detectedRanks.sort((a, b) => b.score - a.score);
             detectedSuits.sort((a, b) => b.score - a.score);
 
-            // Dizinin ilk elemanını nesne olarak çek (Doğru Array İndis Yönetimi)
+            // Dizinin en iyi ilk elemanını nesne olarak yakala
             let bestRank = detectedRanks[0];
             let bestSuit = detectedSuits[0];
 
+            // Merkez Koordinat Hesaplama
             let rankCX = bestRank.x + bestRank.w / 2;
             let rankCY = bestRank.y + bestRank.h / 2;
             let suitCX = bestSuit.x + bestSuit.w / 2;
@@ -288,7 +286,7 @@
             let dX = Math.abs(rankCX - suitCX);
             let dY = Math.abs(rankCY - suitCY);
 
-            // İlk saha başarısı için geometrik toleranslar (X: 100px, Y: 200px)
+            // Geometrik Tolerans Alanı (X ekseni hizası max 100px, Y ekseni yakınlığı max 200px)
             let isAligned = dX < 100;
             let isCloseEnough = dY < 200;
 
