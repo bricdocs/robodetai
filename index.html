@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 36 (RANK & SUIT MOTORU - KESİN REVİZE) -->
+<!-- BRIC BARKOD - VERSIYON 37 (DİNAMİK MATRİS MOTORU) -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V36)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V37)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -116,7 +116,7 @@
 
                     try {
                         const devices = await navigator.mediaDevices.enumerateDevices();
-                        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                        const videoDevices = devices.filter(device => device.kind ImageInput === 'videoinput');
                         if (videoDevices.length > 1) {
                             switchCamBtn.style.display = 'flex';
                         }
@@ -129,7 +129,7 @@
             });
         }
 
-            switchCamBtn.addEventListener('click', async () => {
+                switchCamBtn.addEventListener('click', async () => {
             currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
             statusDiv.innerHTML = 'Kamera Değiştiriliyor...';
             try {
@@ -143,7 +143,7 @@
         // DOĞRUDAN TEK PARÇA 5.9 MB SAF MODELİ OKUYAN YÜKLEYİCİ
         async function loadModel() {
             try {
-                statusDiv.innerText = "5.9 MB Sürüm 36 Saf Model Okunuyor...";
+                statusDiv.innerText = "5.9 MB Sürüm 37 Saf Model Okunuyor...";
                 
                 // Hiçbir kısıtlamaya takılmayan tertemiz WASM motoru
                 session = await ort.InferenceSession.create('./model.onnx', { 
@@ -224,15 +224,15 @@
             ctx.fillText(text, targetBox.x + 4, targetBox.y - 9);
         }
 
-        // SÜRÜM 36: Kesin Çözüm Geometrik Filtre Motoru (Dizi ve İndis Hataları Giderildi)
+                // SÜRÜM 37: Kesin Çözüm Dinamik Matris Filtre Motoru
         let matchCounter = 0;
         let lastDetectedCard = null;
-        const REQUIRED_FRAMES = 2; // Test sürecini hızlandırmak için 2 frame kararlılık yeterli
+        const REQUIRED_FRAMES = 2; 
 
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data; 
             const numBoxes = 8400; 
-            const scoreThreshold = 0.50; // Kalp ve rakamları kaçırmamak için barajı %50'ye çektik
+            const scoreThreshold = 0.40; // İndis krizini tamamen çözmek için barajı %40'a çektik
 
             const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
             const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
@@ -241,44 +241,45 @@
             let detectedRanks = [];
             let detectedSuits = [];
 
+            // Roboflow/YOLOv8 sınıf sıralama esnekliği için etiket eşleme tablosu
+            const classMap = { 0: "3", 1: "8", 2: "Heart" };
+
             for (let i = 0; i < numBoxes; i++) {
-                // YOLOv8 Transpoze mantığına göre sınıf skorlarını okuyoruz
-                let s0 = data[4 * numBoxes + i]; // Sınıf 0 skoru: '3'
-                let s1 = data[5 * numBoxes + i]; // Sınıf 1 skoru: '8'
-                let s2 = data[6 * numBoxes + i]; // Sınıf 2 skoru: 'Heart'
-
-                // Hangisi en yüksekse ve barajın üzerindeyse onu listeye ekle
-                if (s0 > scoreThreshold && s0 > s1 && s0 > s2) {
-                    detectedRanks.push(getBoxData(data, i, scale, xOffset, yOffset, "3", s0, 0));
-                }
-                else if (s1 > scoreThreshold && s1 > s0 && s1 > s2) {
-                    detectedRanks.push(getBoxData(data, i, scale, xOffset, yOffset, "8", s1, 1));
-                }
-                else if (s2 > scoreThreshold && s2 > s0 && s2 > s1) {
-                    detectedSuits.push(getBoxData(data, i, scale, xOffset, yOffset, "Heart", s2, 2));
+                // 3 sınıflı model çıktısında katman 4, 5 ve 6'yı tarıyoruz
+                for (let c = 0; c < 3; c++) {
+                    const score = data[(4 + c) * numBoxes + i];
+                    
+                    if (score > scoreThreshold) {
+                        const label = classMap[c];
+                        const box = getBoxData(data, i, scale, xOffset, yOffset, label, score, c);
+                        
+                        if (c === 0 || c === 1) {
+                            detectedRanks.push(box);
+                        } else if (c === 2) {
+                            detectedSuits.push(box);
+                        }
+                    }
                 }
             }
 
-            // TEŞHİS RADARI: Konsoldaki 'Kalp: 0' krizini çözen izleme mekanizması
+            // TEŞHİS RADARI: Dinamik katman taramasının sonucunu izliyoruz
             if (detectedRanks.length > 0 || detectedSuits.length > 0) {
-                console.log(`[RADAR] Rakam Adayı: ${detectedRanks.length}, Kalp Adayı: ${detectedSuits.length}`);
+                console.log(`[RADAR-V37] Rakam: ${detectedRanks.length}, Kalp: ${detectedSuits.length}`);
             }
 
-            // Frame içinde hem rakam hem kalp yoksa çık
             if (detectedRanks.length === 0 || detectedSuits.length === 0) {
                 if (matchCounter > 0) matchCounter--;
                 return null;
             }
 
-            // Dizileri en yüksek skora göre sırala
+            // En yüksek skorluları başa getir
             detectedRanks.sort((a, b) => b.score - a.score);
             detectedSuits.sort((a, b) => b.score - a.score);
 
-            // En iyi adayları dizinin ilk elemanı [0] olarak çekiyoruz (Hatalı dizi referansı düzeltildi)
+            // Dizinin ilk elemanını nesne olarak çek (Önceki array referans hatası düzeltildi)
             let bestRank = detectedRanks[0];
             let bestSuit = detectedSuits[0];
 
-            // Merkez Koordinat Hesaplama
             let rankCX = bestRank.x + bestRank.w / 2;
             let rankCY = bestRank.y + bestRank.h / 2;
             let suitCX = bestSuit.x + bestSuit.w / 2;
@@ -287,9 +288,9 @@
             let dX = Math.abs(rankCX - suitCX);
             let dY = Math.abs(rankCY - suitCY);
 
-            // İlk saha başarısı için geometrik toleranslar (X: 80px, Y: 180px)
-            let isAligned = dX < 80;
-            let isCloseEnough = dY < 180;
+            // İlk saha başarısı için geometrik toleranslar (X: 100px, Y: 200px)
+            let isAligned = dX < 100;
+            let isCloseEnough = dY < 200;
 
             if (isAligned && isCloseEnough) {
                 let currentCard = bestRank.classId === 0 ? "Heart 3" : "Heart 8";
@@ -323,7 +324,6 @@
             return null;
         }
 
-        // Sürüm 35 koordinat doğruluğunu koruyan yardımcı fonksiyon
         function getBoxData(data, i, scale, xOffset, yOffset, label, score, classId) {
             const numBoxes = 8400;
             let cx = data[0 * numBoxes + i];
