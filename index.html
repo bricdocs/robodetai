@@ -224,15 +224,15 @@
             ctx.fillText(text, targetBox.x + 4, targetBox.y - 9);
         }
 
-        // SÜRÜM 36: Bağımsız 2 ROI ve Geometrik Filtre Motoru [1, 7, 8400]
+        // SÜRÜM 36: Bağımsız 2 ROI ve Geometrik Filtre Motoru (Düzeltilmiş Kesin Sürüm)
         let matchCounter = 0;
         let lastDetectedCard = null;
-        const REQUIRED_FRAMES = 5; // ~250ms anında tepki ve kararlılık kilidi
+        const REQUIRED_FRAMES = 3; // İlk test için tepkiyi hızlandırmak adına 3 frame'e düşürdük
 
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data; 
             const numBoxes = 8400; 
-            const scoreThreshold = 0.75; // %75 altı parlamaları eliyoruz
+            const scoreThreshold = 0.65; // İlk test için barajı hafif esnettik (%65)
 
             const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
             const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
@@ -242,7 +242,6 @@
             let detectedSuits = [];
 
             for (let i = 0; i < numBoxes; i++) {
-                // 3 sınıfın skorunu transpoze matris satırlarından okuyoruz
                 const score_3 = data[4 * numBoxes + i];
                 const score_8 = data[5 * numBoxes + i];
                 const score_Heart = data[6 * numBoxes + i];
@@ -258,15 +257,19 @@
                 }
             }
 
-            // Frame içinde hem rakam hem kalp yoksa sayacı erit ve kutu çizme
+            // Frame içinde hem rakam hem kalp yoksa çık
             if (detectedRanks.length === 0 || detectedSuits.length === 0) {
                 if (matchCounter > 0) matchCounter--;
                 return null;
             }
 
-            // En yüksek skorlu ilk Rank ve Suit adaylarını seçiyoruz
-            let bestRank = detectedRanks.sort((a, b) => b.score - a.score)[0];
-            let bestSuit = detectedSuits.sort((a, b) => b.score - a.score)[0];
+            // Dizileri en yüksek skora göre sırala
+            detectedRanks.sort((a, b) => b.score - a.score);
+            detectedSuits.sort((a, b) => b.score - a.score);
+
+            // En iyi adayları dizinin ilk elemanı [0] olarak çekiyoruz
+            let bestRank = detectedRanks[0];
+            let bestSuit = detectedSuits[0];
 
             // Merkez Koordinat Hesaplama
             let rankCX = bestRank.x + bestRank.w / 2;
@@ -277,9 +280,9 @@
             let dX = Math.abs(rankCX - suitCX);
             let dY = Math.abs(rankCY - suitCY);
 
-            // Geometrik Kurallar: X ekseninde hizalı (max 40px), Y ekseninde yakın (max 100px)
-            let isAligned = dX < 40;
-            let isCloseEnough = dY < 100;
+            // Geometrik Kurallar: İlk test için toleransları biraz daha esnek (X:60px, Y:150px) yaptık
+            let isAligned = dX < 60;
+            let isCloseEnough = dY < 150;
 
             if (isAligned && isCloseEnough) {
                 let currentCard = bestRank.classId === 0 ? "Heart 3" : "Heart 8";
@@ -291,7 +294,6 @@
                     lastDetectedCard = currentCard;
                 }
 
-                // Akümülatör doğrulandıysa iki küçük kutuyu birleştirip tek ROI dönüyoruz
                 if (matchCounter >= REQUIRED_FRAMES) {
                     const minX = Math.min(bestRank.x, bestSuit.x);
                     const minY = Math.min(bestRank.y, bestSuit.y);
@@ -314,7 +316,6 @@
             return null;
         }
 
-        // Sürüm 35 koordinat doğruluğunu koruyan yardımcı fonksiyon
         function getBoxData(data, i, scale, xOffset, yOffset, label, score, classId) {
             const numBoxes = 8400;
             let cx = data[0 * numBoxes + i];
@@ -353,7 +354,7 @@
                 drawBoundingBox(bestBox);
 
             } catch (err) {
-                // Sessiz geçiş
+                console.error("YOLO İşleme Hatası:", err);
             }
 
             requestAnimationFrame(processVideo);
@@ -373,3 +374,4 @@
     </script>
 </body>
 </html>
+
