@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 39 (KESİN DİZİ ONARIMI) -->
+<!-- BRIC BARKOD - VERSIYON 40 (ÇİFT YÖNLÜ SİMETRİ MOTORU) -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V39)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V40)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -140,10 +140,10 @@
             }
         });
 
-        // DOĞRUDAN TEK PARÇA 5.9 MB SAF MODELİ OKUJAN YÜKLEYİCİ
+        // DOĞRUDAN TEK PARÇA 5.9 MB SAF MODELİ OKUYAN YÜKLEYİCİ
         async function loadModel() {
             try {
-                statusDiv.innerText = "5.9 MB Sürüm 39 Saf Model Okunuyor...";
+                statusDiv.innerText = "5.9 MB Sürüm 40 Saf Model Okunuyor...";
                 
                 // Hiçbir kısıtlamaya takılmayan tertemiz WASM motoru
                 session = await ort.InferenceSession.create('./model.onnx', { 
@@ -224,7 +224,7 @@
             ctx.fillText(text, targetBox.x + 4, targetBox.y - 9);
         }
 
-        // SÜRÜM 39: Kesin Çözüm Dinamik Matris Filtre Motoru
+        // SÜRÜM 40: Çift Yönlü Simetri Filtre Motoru
         let matchCounter = 0;
         let lastDetectedCard = null;
         const REQUIRED_FRAMES = 2; 
@@ -232,7 +232,7 @@
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data; 
             const numBoxes = 8400; 
-            const scoreThreshold = 0.40; // İndis krizini tamamen çözmek için barajı %40'a çektik
+            const scoreThreshold = 0.35; // Ön kameradaki ham piksel bükülmelerini yakalamak için %35 barajı
 
             const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
             const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
@@ -241,16 +241,15 @@
             let detectedRanks = [];
             let detectedSuits = [];
 
-            // Roboflow/YOLOv8 sınıf sıralama esnekliği için etiket esleme tablosu
             const classMap = { 0: "3", 1: "8", 2: "Heart" };
 
             for (let i = 0; i < numBoxes; i++) {
-                // 3 sınıflı model çıktısında katman 4, 5 ve 6'yı tarıyoruz
                 for (let c = 0; c < 3; c++) {
                     const score = data[(4 + c) * numBoxes + i];
                     
                     if (score > scoreThreshold) {
                         const label = classMap[c];
+                        // GetBoxData fonksiyonundan dönen saf kutuyu çekiyoruz
                         const box = getBoxData(data, i, scale, xOffset, yOffset, label, score, c);
                         
                         if (c === 0 || c === 1) {
@@ -262,9 +261,9 @@
                 }
             }
 
-            // TEŞHİS RADARI: Dinamik katman taramasının sonucunu izliyoruz
+            // TEŞHİS RADARI V40
             if (detectedRanks.length > 0 || detectedSuits.length > 0) {
-                console.log(`[RADAR-V39] Rakam: ${detectedRanks.length}, Kalp: ${detectedSuits.length}`);
+                console.log(`[RADAR-V40] Rakam Adayı: ${detectedRanks.length}, Kalp Adayı: ${detectedSuits.length}`);
             }
 
             if (detectedRanks.length === 0 || detectedSuits.length === 0) {
@@ -272,11 +271,10 @@
                 return null;
             }
 
-            // En yüksek skorluları başa getir
+            // Dizileri skora göre sıralayıp EN YÜKSEK SKORLU İLK NESNEYİ [0] dizininden çekiyoruz
             detectedRanks.sort((a, b) => b.score - a.score);
             detectedSuits.sort((a, b) => b.score - a.score);
 
-            // Dizinin ilk elemanını tam nesne olarak çek (ARRAY REFERANS HATASI DUZELTILDI)
             let bestRank = detectedRanks[0];
             let bestSuit = detectedSuits[0];
 
@@ -288,9 +286,9 @@
             let dX = Math.abs(rankCX - suitCX);
             let dY = Math.abs(rankCY - suitCY);
 
-            // İlk saha başarısı için geometrik toleranslar (X: 100px, Y: 200px)
-            let isAligned = dX < 100;
-            let isCloseEnough = dY < 200;
+            // Genişletilmiş Geometrik Tolerans Sınırları (X: 120px, Y: 220px)
+            let isAligned = dX < 120;
+            let isCloseEnough = dY < 220;
 
             if (isAligned && isCloseEnough) {
                 let currentCard = bestRank.classId === 0 ? "Heart 3" : "Heart 8";
