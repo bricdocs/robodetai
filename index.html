@@ -1,4 +1,4 @@
-<!-- BRIC BARKOD - VERSIYON 37 (DİNAMİK MATRİS MOTORU) -->
+<!-- BRIC BARKOD - VERSIYON 37 (DİNAMİK MATRİS MOTORU - TAM DÜZELTİLMEDİR) -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -116,7 +116,7 @@
 
                     try {
                         const devices = await navigator.mediaDevices.enumerateDevices();
-                        const videoDevices = devices.filter(device => device.kind ImageInput === 'videoinput');
+                        const videoDevices = devices.filter(device => device.kind === 'videoinput');
                         if (videoDevices.length > 1) {
                             switchCamBtn.style.display = 'flex';
                         }
@@ -129,7 +129,7 @@
             });
         }
 
-                switchCamBtn.addEventListener('click', async () => {
+        switchCamBtn.addEventListener('click', async () => {
             currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
             statusDiv.innerHTML = 'Kamera Değiştiriliyor...';
             try {
@@ -224,7 +224,7 @@
             ctx.fillText(text, targetBox.x + 4, targetBox.y - 9);
         }
 
-                // SÜRÜM 37: Kesin Çözüm Dinamik Matris Filtre Motoru
+        // SÜRÜM 37: Kesin Çözüm Dinamik Matris Filtre Motoru
         let matchCounter = 0;
         let lastDetectedCard = null;
         const REQUIRED_FRAMES = 2; 
@@ -262,7 +262,7 @@
                 }
             }
 
-            // TEŞHİS RADARI: Dinamik katman taramasının sonucunu izliyoruz
+            // TEŞHİS RADARI: Dinamik katman taramasının sonucunu izleyyoruz
             if (detectedRanks.length > 0 || detectedSuits.length > 0) {
                 console.log(`[RADAR-V37] Rakam: ${detectedRanks.length}, Kalp: ${detectedSuits.length}`);
             }
@@ -276,7 +276,7 @@
             detectedRanks.sort((a, b) => b.score - a.score);
             detectedSuits.sort((a, b) => b.score - a.score);
 
-            // Dizinin ilk elemanını nesne olarak çek (Önceki array referans hatası düzeltildi)
+            // Dizinin ilk elemanını nesne olarak çek (Doğru Array İndis Yönetimi)
             let bestRank = detectedRanks[0];
             let bestSuit = detectedSuits[0];
 
