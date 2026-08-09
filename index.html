@@ -257,6 +257,11 @@
                 }
             }
 
+            // TEŞHİS RADARI
+            if (detectedRanks.length > 0 || detectedSuits.length > 0) {
+                console.log(`[RADAR] Rakam Adayı: ${detectedRanks.length}, Kalp Adayı: ${detectedSuits.length}`);
+            }
+            
             // Frame içinde hem rakam hem kalp yoksa çık
             if (detectedRanks.length === 0 || detectedSuits.length === 0) {
                 if (matchCounter > 0) matchCounter--;
