@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 40 (ÇİFT YÖNLÜ SİMETRİ MOTORU) -->
+<!-- BRIC BARKOD - VERSIYON 42 (DIGITAL ZOOM & CROP MOTORU) -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V40)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V42)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -140,10 +140,10 @@
             }
         });
 
-        // DOĞRUDAN TEK PARÇA 5.9 MB SAF MODELİ OKUYAN YÜKLEYİCİ
+        // DOĞRUDAN TEK PARÇA 5.9 MB SAF MODELİ OKUJAN YÜKLEYİCİ
         async function loadModel() {
             try {
-                statusDiv.innerText = "5.9 MB Sürüm 40 Saf Model Okunuyor...";
+                statusDiv.innerText = "5.9 MB Sürüm 42 Saf Model Okunuyor...";
                 
                 // Hiçbir kısıtlamaya takılmayan tertemiz WASM motoru
                 session = await ort.InferenceSession.create('./model.onnx', { 
@@ -157,21 +157,27 @@
             }
         }
 
-        // Letterbox Önişleme
+        // SÜRÜM 42 YENİLENMİŞ PREPROCESS: Sol Üst Köşeyi %300 Kırpan (Digital Zoom) Ön İşleme
         function preprocess(videoFrame, targetWidth, targetHeight) {
             tempCtx.fillStyle = "black";
             tempCtx.fillRect(0, 0, targetWidth, targetHeight);
 
             const srcWidth = videoFrame.videoWidth;
             const srcHeight = videoFrame.videoHeight;
-            const scale = Math.min(targetWidth / srcWidth, targetHeight / srcHeight);
-            
-            const nw = srcWidth * scale;
-            const nh = srcHeight * scale;
-            const dx = (targetWidth - nw) / 2;
-            const dy = (targetHeight - nh) / 2;
 
-            tempCtx.drawImage(videoFrame, 0, 0, srcWidth, srcHeight, dx, dy, nw, nh);
+            // Kural: Kamera görüntüsünün sadece sol üst %33'lük alanını (Kutunun köşesini) alıyoruz
+            // Böylece modele %300 yazılımsal yakınlaştırma (Crop) yapılmış oluyor
+            const cropWidth = srcWidth * 0.33;
+            const cropHeight = srcHeight * 0.33;
+            const cropX = 0; // Sol kenar
+            const cropY = 0; // Üst kenar
+
+            // Kırpılan o dar alanı 640x640 boyutuna esneterek tam modelin aradığı piksellere dönüştürüyoruz
+            tempCtx.drawImage(
+                videoFrame, 
+                cropX, cropY, cropWidth, cropHeight, // Kaynak kırpma koordinatları
+                0, 0, targetWidth, targetHeight      // Hedef tam model boyutu
+            );
             
             const imgData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
             const { data } = imgData;
@@ -224,7 +230,7 @@
             ctx.fillText(text, targetBox.x + 4, targetBox.y - 9);
         }
 
-        // SÜRÜM 40: Çift Yönlü Simetri Filtre Motoru
+        // SÜRÜM 42: %300 Zoom Uyumlu Dinamik Matris Filtre Motoru
         let matchCounter = 0;
         let lastDetectedCard = null;
         const REQUIRED_FRAMES = 2; 
@@ -232,11 +238,7 @@
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data; 
             const numBoxes = 8400; 
-            const scoreThreshold = 0.35; // Ön kameradaki ham piksel bükülmelerini yakalamak için %35 barajı
-
-            const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
-            const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
-            const yOffset = (modelInputHeight - canvasHeight * scale) / 2;
+            const scoreThreshold = 0.45; // Çözünürlük büyümesinden dolayı barajı kararlı %45 yaptık
 
             let detectedRanks = [];
             let detectedSuits = [];
@@ -249,8 +251,9 @@
                     
                     if (score > scoreThreshold) {
                         const label = classMap[c];
-                        // GetBoxData fonksiyonundan dönen saf kutuyu çekiyoruz
-                        const box = getBoxData(data, i, scale, xOffset, yOffset, label, score, c);
+                        // SÜRÜM 42 ÖNEMLİ MATEMATİK: Görüntü sol üst %33 kırpıldığı için koordinat geri-dönüşüm 
+                        // formülü kırpma oranına (0.33) göre yeniden ölçeklendirildi.
+                        const box = getBoxDataZoom(data, i, canvasWidth, canvasHeight, label, score, c);
                         
                         if (c === 0 || c === 1) {
                             detectedRanks.push(box);
@@ -261,9 +264,9 @@
                 }
             }
 
-            // TEŞHİS RADARI V40
+            // TEŞHİS RADARI V42
             if (detectedRanks.length > 0 || detectedSuits.length > 0) {
-                console.log(`[RADAR-V40] Rakam Adayı: ${detectedRanks.length}, Kalp Adayı: ${detectedSuits.length}`);
+                console.log(`[RADAR-V42] %300 Kırpmada -> Rakam: ${detectedRanks.length}, Kalp: ${detectedSuits.length}`);
             }
 
             if (detectedRanks.length === 0 || detectedSuits.length === 0) {
@@ -271,10 +274,11 @@
                 return null;
             }
 
-            // Dizileri skora göre sıralayıp EN YÜKSEK SKORLU İLK NESNEYİ [0] dizininden çekiyoruz
+            // Dizileri skora göre sırala
             detectedRanks.sort((a, b) => b.score - a.score);
             detectedSuits.sort((a, b) => b.score - a.score);
 
+            // En iyi nesneyi doğrudan dizinin ilk elemanından çek
             let bestRank = detectedRanks[0];
             let bestSuit = detectedSuits[0];
 
@@ -286,7 +290,7 @@
             let dX = Math.abs(rankCX - suitCX);
             let dY = Math.abs(rankCY - suitCY);
 
-            // Genişletilmiş Geometrik Tolerans Sınırları (X: 120px, Y: 220px)
+            // Büyütülmüş piksel uzayında esnek toleranslar (X: 120px, Y: 220px)
             let isAligned = dX < 120;
             let isCloseEnough = dY < 220;
 
@@ -322,18 +326,31 @@
             return null;
         }
 
-        function getBoxData(data, i, scale, xOffset, yOffset, label, score, classId) {
+        // SÜRÜM 42 ÖZEL: %33'lük Kırpma (Zoom) Alanını Gerçek Canvas Boyutuna Hatasız İzdüşüren Yeni Formül
+        function getBoxDataZoom(data, i, canvasWidth, canvasHeight, label, score, classId) {
             const numBoxes = 8400;
-            let cx = data[0 * numBoxes + i];
-            let cy = data[1 * numBoxes + i];
-            let w  = data[2 * numBoxes + i];
-            let h  = data[3 * numBoxes + i];
+            let cx = data[0 * numBoxes + i]; // 0-640 arası model X
+            let cy = data[1 * numBoxes + i]; // 0-640 arası model Y
+            let w  = data[2 * numBoxes + i]; // 0-640 arası model W
+            let h  = data[3 * numBoxes + i]; // 0-640 arası model H
+
+            // Model içindeki (640x640) oranları normale döküyoruz
+            let normCX = cx / 640;
+            let normCY = cy / 640;
+            let normW  = w / 640;
+            let normH  = h / 640;
+
+            // Kural: %33'lük kırpma alanına göre canvas piksellerini hesapla
+            let actualW = normW * (canvasWidth * 0.33);
+            let actualH = normH * (canvasHeight * 0.33);
+            let actualX = (normCX - normW / 2) * (canvasWidth * 0.33);
+            let actualY = (normCY - normH / 2) * (canvasHeight * 0.33);
 
             return {
-                x: ((cx - (w / 2)) - xOffset) / scale,
-                y: ((cy - (h / 2)) - yOffset) / scale,
-                w: w / scale,
-                h: h / scale,
+                x: actualX,
+                y: actualY,
+                w: actualW,
+                h: actualH,
                 label: label,
                 score: score,
                 classId: classId
@@ -348,12 +365,12 @@
 
             try {
                 const inputTensor = preprocess(video, modelInputWidth, modelInputHeight);
-                const inputName = session.inputNames || "images";
+                const inputName = session.inputNames[0] || "images";
                 const feeds = {};
                 feeds[inputName] = inputTensor;
 
                 const outputs = await session.run(feeds);
-                const outputName = session.outputNames || "output0";
+                const outputName = session.outputNames[0] || "output0";
                 const outputTensor = outputs[outputName];
 
                 const bestBox = parseYOLOv8Output(outputTensor, canvas.width, canvas.height);
