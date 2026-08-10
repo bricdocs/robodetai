@@ -1,0 +1,331 @@
+<!-- BRIC BARKOD - VERSIYON 46 (SOL ÜST KILAVUZ KUTU & ALAN FİLTRESİ) -->
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bric Barkod - Real-Time AI Scanner (V46)</title>
+    
+    <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
+    <script>
+        var onnx_part1 = "https://" + "cdn.js" + "delivr.net/npm/";
+        var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
+        document.write('<script src="' + onnx_part1 + onnx_part2 + '"><\/script>');
+
+        var tw_part1 = "https://" + "cdn.js" + "delivr.net/npm/@tail";
+        var tw_part2 = "windcss/br" + "owser@4";
+        document.write('<script src="' + tw_part1 + tw_part2 + '"><\/script>');
+    </script>
+
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    
+    <style>
+        /* Görüntü kozmetik olarak düz (Aynalama tamamen kapalı) */
+        video, canvas {
+            transform: scaleX(1);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-4 select-none">
+
+    <div class="relative w-full max-w-xl bg-gray-800 rounded-2xl overflow-hidden shadow-2xl border border-gray-700">
+        <video id="webcam" autoplay playsinline muted class="w-full h-auto block"></video>
+        <canvas id="overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
+        
+        <!-- Dinamik Durum Paneli (Uzak Mesafeden Okunabilir Devasa Gösterge) -->
+        <div id="status" class="absolute top-4 left-4 bg-black/85 px-6 py-4 rounded-2xl text-xl font-bold tracking-wider flex items-center gap-3 border-2 border-green-500 text-green-400 z-10 shadow-2xl">
+            <span class="w-3 h-3 rounded-full bg-green-400 animate-ping"></span>
+            Yapay Zeka Yükleniyor...
+        </div>
+
+        <!-- Kamera Değiştirme Butonu (Her Zaman Zorunlu Görünür) -->
+        <button id="switchCamBtn" class="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-sm px-5 py-3 rounded-xl shadow-2xl border border-blue-400/40 tracking-wide transition-all z-10 flex items-center gap-2 cursor-pointer">
+            🔄 Kamera Değiştir
+        </button>
+    </div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('overlay');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const statusDiv = document.getElementById('status');
+        const switchCamBtn = document.getElementById('switchCamBtn');
+        
+        let session = null;
+        let currentStream = null;
+        let currentFacingMode = 'user'; // Ön kamera öncelikli
+        
+        const modelInputWidth = 640;
+        const modelInputHeight = 640;
+
+        // Sürüm 46 Kılavuz Çerçeve Ölçüleri (Sol üst köşede kartı hedefleyeceğimiz alan)
+        const guideBox = {
+            x: 25,
+            y: 95, // Devasa durum panelinin altına denk gelecek şekilde ayarlandı
+            w: 160,
+            h: 220
+        };
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = modelInputWidth;
+        tempCanvas.height = modelInputHeight;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+
+        // Kamera Kurulumu
+        async function setupCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            const constraintsOptions = [
+                { video: { facingMode: { ideal: currentFacingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+                { video: { facingMode: currentFacingMode }, audio: false },
+                { video: true, audio: false }
+            ];
+
+            let stream = null;
+            let lastError = null;
+
+            for (const constraints of constraintsOptions) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    if (stream) break; 
+                } catch (err) {
+                    lastError = err;
+                }
+            }
+
+            if (!stream) {
+                statusDiv.innerText = "Kamera Hatası!";
+                throw lastError;
+            }
+
+            currentStream = stream;
+            video.srcObject = stream;
+
+            return new Promise((resolve) => {
+                video.onloadedmetadata = async () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    resolve();
+                };
+            });
+        }
+
+        switchCamBtn.addEventListener('click', async () => {
+            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+            statusDiv.innerHTML = 'Kamera Değiştiriliyor...';
+            try {
+                await setupCamera();
+                statusDiv.innerHTML = 'Canlı AI Aktif';
+            } catch (err) {
+                console.error(err);
+            }
+        });
+
+        // DOĞRUDAN TEK PARÇA 5.9 MB SAF MODELİ OKUJAN YÜKLEYİCİ
+        async function loadModel() {
+            try {
+                statusDiv.innerText = "5.9 MB Saf Model Okunuyor...";
+                
+                session = await ort.InferenceSession.create('./model.onnx', { 
+                    executionProviders: ['wasm']
+                });
+
+                statusDiv.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span> Canlı AI Aktif';
+            } catch (err) {
+                console.error("Model yükleme hatası:", err);
+                statusDiv.innerText = "Kök dizinde model.onnx dosyası bulunamadı!";
+            }
+        }
+
+        // Letterbox Önişleme (Sürüm 35 Kararlı Standardı)
+        function preprocess(videoFrame, targetWidth, targetHeight) {
+            tempCtx.fillStyle = "black";
+            tempCtx.fillRect(0, 0, targetWidth, targetHeight);
+
+            const srcWidth = videoFrame.videoWidth;
+            const srcHeight = videoFrame.videoHeight;
+            const scale = Math.min(targetWidth / srcWidth, targetHeight / srcHeight);
+            
+            const nw = srcWidth * scale;
+            const nh = srcHeight * scale;
+            const dx = (targetWidth - nw) / 2;
+            const dy = (targetHeight - nh) / 2;
+
+            tempCtx.drawImage(videoFrame, 0, 0, srcWidth, srcHeight, dx, dy, nw, nh);
+            
+            const imgData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
+            const { data } = imgData;
+
+            const rChannel = new Float32Array(targetWidth * targetHeight);
+            const gChannel = new Float32Array(targetWidth * targetHeight);
+            const bChannel = new Float32Array(targetWidth * targetHeight);
+
+            for (let i = 0; i < data.length; i += 4) {
+                const pixelIndex = i / 4;
+                rChannel[pixelIndex] = data[i] / 255.0;
+                gChannel[pixelIndex] = data[i + 1] / 255.0;
+                bChannel[pixelIndex] = data[i + 2] / 255.0;
+            }
+
+            const floatData = new Float32Array(3 * targetWidth * targetHeight);
+            floatData.set(rChannel, 0);
+            floatData.set(gChannel, targetWidth * targetHeight);
+            floatData.set(bChannel, 2 * targetWidth * targetHeight);
+
+            return new ort.Tensor('float32', floatData, [1, 3, targetWidth, targetHeight]);
+        }
+
+        // SÜRÜM 46: Kullanıcı Kılavuz Kutusu ve Dinamik Çoklu ROI Çizici
+        function drawBoundingBoxes(boxesList) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Kural: Her frame'de sol üstteki o şık kesikli hedef çerçevesini zorunlu çiziyoruz
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)'; // Canlı kırmızı hedef rengi
+            ctx.lineWidth = 3;
+            ctx.setLineDash([8, 6]); // Kesikli çizgi efekti
+            ctx.beginPath();
+            ctx.rect(guideBox.x, guideBox.y, guideBox.w, guideBox.h);
+            ctx.stroke();
+            ctx.setLineDash([]); // Çizgi stilini sonraki çizimler için düz hale sıfırla
+
+            // Kılavuz kutusunun üzerine küçük bir bilgilendirme metni yazıyoruz
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillText("KART KÖŞESİNİ BURAYA TUTUN", guideBox.x + 4, guideBox.y - 6);
+
+            if (!boxesList || boxesList.length === 0) return;
+
+            // Alan filtresinden sağ sağlim geçen onaylı nesneleri yeşil ROI olarak çiziyoruz
+            boxesList.forEach(box => {
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 4;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#00FF00';
+
+                ctx.beginPath();
+                ctx.rect(box.x, box.y, box.w, box.h);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                const text = `${box.label} (%${Math.round(box.score * 100)})`;
+                ctx.font = 'bold 15px sans-serif';
+                const textWidth = ctx.measureText(text).width;
+                
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.9)'; 
+                ctx.fillRect(box.x - 2, box.y - 26, textWidth + 12, 24);
+
+                ctx.fillStyle = '#000000'; 
+                ctx.fillText(text, box.x + 4, box.y - 9);
+            });
+        }
+
+        // SÜRÜM 46: Sol Üst Alan Filtreli Çözüm Motoru
+        function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
+            const data = outputTensor.data; 
+            const numBoxes = 8400; 
+            const scoreThreshold = 0.35; // Model hassasiyetini korumak için %35 barajı
+
+            const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
+            const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
+            const yOffset = (modelInputHeight - canvasHeight * scale) / 2;
+
+            let validBoxes = [];
+            let rCount = 0;
+            let sCount = 0;
+
+            const classMap = { 0: "3", 1: "8", 2: "Heart" };
+
+            for (let i = 0; i < numBoxes; i++) {
+                for (let c = 0; c < 3; c++) {
+                    const score = data[(4 + c) * numBoxes + i];
+                    
+                    if (score > scoreThreshold) {
+                        const label = classMap[c];
+                        const box = getBoxData(data, i, scale, xOffset, yOffset, label, score, c);
+                        
+                        // KURAL: MUTLAK ALAN FİLTRESİ
+                        // Nesnenin merkez noktası (X ve Y), sol üstteki kırmızı kılavuz kutumuzun 
+                        // sınırları (guideBox) içinde kalıyorsa kabul ediyoruz. Dışındakileri anında eliyoruz!
+                        let boxCX = box.x + box.w / 2;
+                        let boxCY = box.y + box.h / 2;
+
+                        let isInGuideX = boxCX >= guideBox.x && boxCX <= (guideBox.x + guideBox.w);
+                        let isInGuideY = boxCY >= guideBox.y && boxCY <= (guideBox.y + guideBox.h);
+
+                        if (isInGuideX && isInGuideY) {
+                            validBoxes.push(box);
+                            if (c === 0 || c === 1) rCount++;
+                            if (c === 2) sCount++;
+                        }
+                    }
+                }
+            }
+
+            // Kalınlaştırılmış dev mobil paneli güncelliyoruz
+            statusDiv.innerHTML = `<span class="w-3 h-3 rounded-full bg-green-500"></span> Rakam: ${rCount} | Kalp: ${sCount}`;
+
+            // En yüksek skorlu ilk 3 onaylı kutuyu çizime gönderiyoruz
+            validBoxes.sort((a, b) => b.score - a.score);
+            return validBoxes.slice(0, 3);
+        }
+
+        function getBoxData(data, i, scale, xOffset, yOffset, label, score, classId) {
+            const numBoxes = 8400;
+            let cx = data[0 * numBoxes + i];
+            let cy = data[1 * numBoxes + i];
+            let w  = data[2 * numBoxes + i];
+            let h  = data[3 * numBoxes + i];
+
+            return {
+                x: ((cx - (w / 2)) - xOffset) / scale,
+                y: ((cy - (h / 2)) - yOffset) / scale,
+                w: w / scale,
+                h: h / scale,
+                label: label,
+                score: score,
+                classId: classId
+            };
+        }
+
+        async function processVideo() {
+            if (video.paused || video.ended || !session) {
+                requestAnimationFrame(processVideo);
+                return;
+            }
+
+            try {
+                const inputTensor = preprocess(video, modelInputWidth, modelInputHeight);
+                const inputName = session.inputNames || "images";
+                const feeds = {};
+                feeds[inputName] = inputTensor;
+
+                const outputs = await session.run(feeds);
+                const outputName = session.outputNames || "output0";
+                const outputTensor = outputs[outputName];
+
+                const currentBoxes = parseYOLOv8Output(outputTensor, canvas.width, canvas.height);
+                drawBoundingBoxes(currentBoxes);
+
+            } catch (err) {
+                console.error("YOLO İşleme Hatası:", err);
+            }
+
+            requestAnimationFrame(processVideo);
+        }
+
+        async function main() {
+            try {
+                await setupCamera();
+                await loadModel();
+                processVideo();
+            } catch (e) {
+                console.error("Sistem hatası:", e);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', main);
+    </script>
+</body>
+</html>
