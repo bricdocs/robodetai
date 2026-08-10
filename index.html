@@ -1,10 +1,10 @@
-<!-- BRIC BARKOD - VERSIYON 42 (DIGITAL ZOOM & CROP MOTORU) -->
+<!-- BRIC BARKOD - VERSIYON 43 (DONANIMSAL ZOOM & MOBİL GÖSTERGE MOTORU) -->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bric Barkod - Real-Time AI Scanner (V42)</title>
+    <title>Bric Barkod - Real-Time AI Scanner (V43)</title>
     
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -32,8 +32,8 @@
         <video id="webcam" autoplay playsinline muted class="w-full h-auto block"></video>
         <canvas id="overlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></canvas>
         
-        <!-- Dinamik Durum Paneli -->
-        <div id="status" class="absolute top-4 left-4 bg-black/70 px-4 py-2 rounded-full text-xs font-semibold tracking-wider flex items-center gap-2 border border-green-500/50 text-green-400 z-10">
+        <!-- Dinamik Durum Paneli (Sürüm 43 Mobil Gösterge Alanı) -->
+        <div id="status" class="absolute top-4 left-4 bg-black/80 px-4 py-2 rounded-full text-xs font-semibold tracking-wider flex items-center gap-2 border border-green-500/50 text-green-400 z-10">
             <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
             Yapay Zeka Yükleniyor...
         </div>
@@ -63,14 +63,15 @@
         tempCanvas.height = modelInputHeight;
         const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
-        // Kamera Kurulumu
+        // Kamera Kurulumu (Sürüm 43: Donanımlı Ön ve Arka Kamera Zoom Kontrolü)
         async function setupCamera() {
             if (currentStream) {
                 currentStream.getTracks().forEach(track => track.stop());
             }
 
+            // PC'de piksellerin erimesini önlemek için en baştan yüksek çözünürlük talep ediyoruz
             const constraintsOptions = [
-                { video: { facingMode: { ideal: currentFacingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+                { video: { facingMode: { ideal: currentFacingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
                 { video: { facingMode: currentFacingMode }, audio: false },
                 { video: true, audio: false }
             ];
@@ -100,18 +101,21 @@
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
 
-                    if (currentFacingMode === 'environment') {
-                        try {
-                            const videoTrack = stream.getVideoTracks();
-                            const capabilities = videoTrack.getCapabilities();
-                            if (capabilities.zoom) {
-                                await videoTrack.applyConstraints({
-                                    advanced: [{ zoom: Math.min(1.5, capabilities.zoom.max) }]
-                                });
-                            }
-                        } catch (zoomErr) {
-                            console.warn("Zoom hatası:", zoomErr);
+                    // Hem ön hem de arka kamera için donanımsal mercek zoom motorunu tetikliyoruz
+                    try {
+                        const videoTrack = stream.getVideoTracks()[0];
+                        const capabilities = videoTrack.getCapabilities();
+                        
+                        // Eğer cihazın kamerası donanımlı yakınlaştırmayı destekliyorsa direkt 3 katına kilitliyoruz
+                        if (capabilities.zoom) {
+                            const targetZoom = Math.min(3.0, capabilities.zoom.max);
+                            await videoTrack.applyConstraints({
+                                advanced: [{ zoom: targetZoom }]
+                            });
+                            console.log(`Donanımsal Zoom Aktif: ${targetZoom}`);
                         }
+                    } catch (zoomErr) {
+                        console.warn("Donanımsal mercek zoom hatası:", zoomErr);
                     }
 
                     try {
@@ -143,7 +147,7 @@
         // DOĞRUDAN TEK PARÇA 5.9 MB SAF MODELİ OKUJAN YÜKLEYİCİ
         async function loadModel() {
             try {
-                statusDiv.innerText = "5.9 MB Sürüm 42 Saf Model Okunuyor...";
+                statusDiv.innerText = "5.9 MB Sürüm 43 Saf Model Okunuyor...";
                 
                 // Hiçbir kısıtlamaya takılmayan tertemiz WASM motoru
                 session = await ort.InferenceSession.create('./model.onnx', { 
@@ -157,27 +161,25 @@
             }
         }
 
-        // SÜRÜM 42 YENİLENMİŞ PREPROCESS: Sol Üst Köşeyi %300 Kırpan (Digital Zoom) Ön İşleme
+        // Sürüm 35 standardındaki o kararlı, görüntüyü bozmayan Letterbox ön işleme fonksiyonu
         function preprocess(videoFrame, targetWidth, targetHeight) {
+            // Tarayıcının GPU donanım gücünü kullanarak pikselleri pürüzsüz ölçeklendiriyoruz (Bicubic smoothing)
+            tempCtx.imageSmoothingEnabled = true;
+            tempCtx.imageSmoothingQuality = 'high';
+
             tempCtx.fillStyle = "black";
             tempCtx.fillRect(0, 0, targetWidth, targetHeight);
 
             const srcWidth = videoFrame.videoWidth;
             const srcHeight = videoFrame.videoHeight;
+            const scale = Math.min(targetWidth / srcWidth, targetHeight / srcHeight);
+            
+            const nw = srcWidth * scale;
+            const nh = srcHeight * scale;
+            const dx = (targetWidth - nw) / 2;
+            const dy = (targetHeight - nh) / 2;
 
-            // Kural: Kamera görüntüsünün sadece sol üst %33'lük alanını (Kutunun köşesini) alıyoruz
-            // Böylece modele %300 yazılımsal yakınlaştırma (Crop) yapılmış oluyor
-            const cropWidth = srcWidth * 0.33;
-            const cropHeight = srcHeight * 0.33;
-            const cropX = 0; // Sol kenar
-            const cropY = 0; // Üst kenar
-
-            // Kırpılan o dar alanı 640x640 boyutuna esneterek tam modelin aradığı piksellere dönüştürüyoruz
-            tempCtx.drawImage(
-                videoFrame, 
-                cropX, cropY, cropWidth, cropHeight, // Kaynak kırpma koordinatları
-                0, 0, targetWidth, targetHeight      // Hedef tam model boyutu
-            );
+            tempCtx.drawImage(videoFrame, 0, 0, srcWidth, srcHeight, dx, dy, nw, nh);
             
             const imgData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
             const { data } = imgData;
@@ -230,7 +232,7 @@
             ctx.fillText(text, targetBox.x + 4, targetBox.y - 9);
         }
 
-        // SÜRÜM 42: %300 Zoom Uyumlu Dinamik Matris Filtre Motoru
+        // SÜRÜM 43: Saf Sayısal Matris Filtre Motoru + Mobil Gösterge Paneli
         let matchCounter = 0;
         let lastDetectedCard = null;
         const REQUIRED_FRAMES = 2; 
@@ -238,7 +240,11 @@
         function parseYOLOv8Output(outputTensor, canvasWidth, canvasHeight) {
             const data = outputTensor.data; 
             const numBoxes = 8400; 
-            const scoreThreshold = 0.45; // Çözünürlük büyümesinden dolayı barajı kararlı %45 yaptık
+            const scoreThreshold = 0.40; // Donanımsal zoom pikselleri netleştireceği için kararlı %40 barajı
+
+            const scale = Math.min(modelInputWidth / canvasWidth, modelInputHeight / canvasHeight);
+            const xOffset = (modelInputWidth - canvasWidth * scale) / 2;
+            const yOffset = (modelInputHeight - canvasHeight * scale) / 2;
 
             let detectedRanks = [];
             let detectedSuits = [];
@@ -246,39 +252,34 @@
             const classMap = { 0: "3", 1: "8", 2: "Heart" };
 
             for (let i = 0; i < numBoxes; i++) {
-                for (let c = 0; c < 3; c++) {
-                    const score = data[(4 + c) * numBoxes + i];
-                    
-                    if (score > scoreThreshold) {
-                        const label = classMap[c];
-                        // SÜRÜM 42 ÖNEMLİ MATEMATİK: Görüntü sol üst %33 kırpıldığı için koordinat geri-dönüşüm 
-                        // formülü kırpma oranına (0.33) göre yeniden ölçeklendirildi.
-                        const box = getBoxDataZoom(data, i, canvasWidth, canvasHeight, label, score, c);
-                        
-                        if (c === 0 || c === 1) {
-                            detectedRanks.push(box);
-                        } else if (c === 2) {
-                            detectedSuits.push(box);
-                        }
-                    }
+                const s0 = data[4 * numBoxes + i]; // Sınıf 0: '3'
+                const s1 = data[5 * numBoxes + i]; // Sınıf 1: '8'
+                const s2 = data[6 * numBoxes + i]; // Sınıf 2: 'Heart'
+
+                if (s0 > scoreThreshold && s0 > s1 && s0 > s2) {
+                    detectedRanks.push(getBoxData(data, i, scale, xOffset, yOffset, "3", s0, 0));
+                }
+                if (s1 > scoreThreshold && s1 > s0 && s1 > s2) {
+                    detectedRanks.push(getBoxData(data, i, scale, xOffset, yOffset, "8", s1, 1));
+                }
+                if (s2 > scoreThreshold && s2 > s0 && s2 > s1) {
+                    detectedSuits.push(getBoxData(data, i, scale, xOffset, yOffset, "Heart", s2, 2));
                 }
             }
 
-            // TEŞHİS RADARI V42
-            if (detectedRanks.length > 0 || detectedSuits.length > 0) {
-                console.log(`[RADAR-V42] %300 Kırpmada -> Rakam: ${detectedRanks.length}, Kalp: ${detectedSuits.length}`);
-            }
+            // SÜRÜM 43 MOBİL DEVRİM: Bilgisayara ihtiyaç duymadan veriyi doğrudan telefon ekranına basıyoruz
+            statusDiv.innerHTML = `<span class="w-2 h-2 rounded-full bg-green-500"></span> Rakam: ${detectedRanks.length} | Kalp: ${detectedSuits.length}`;
 
             if (detectedRanks.length === 0 || detectedSuits.length === 0) {
                 if (matchCounter > 0) matchCounter--;
                 return null;
             }
 
-            // Dizileri skora göre sırala
+            // En yüksek skorluları sırala
             detectedRanks.sort((a, b) => b.score - a.score);
             detectedSuits.sort((a, b) => b.score - a.score);
 
-            // En iyi nesneyi doğrudan dizinin ilk elemanından çek
+            // Dizinin ilk elemanını saf nesne olarak yakala
             let bestRank = detectedRanks[0];
             let bestSuit = detectedSuits[0];
 
@@ -290,9 +291,9 @@
             let dX = Math.abs(rankCX - suitCX);
             let dY = Math.abs(rankCY - suitCY);
 
-            // Büyütülmüş piksel uzayında esnek toleranslar (X: 120px, Y: 220px)
-            let isAligned = dX < 120;
-            let isCloseEnough = dY < 220;
+            // Sürüm 35 hassasiyetindeki dikey hizalama sınırları (X: 80px, Y: 180px)
+            let isAligned = dX < 80;
+            let isCloseEnough = dY < 180;
 
             if (isAligned && isCloseEnough) {
                 let currentCard = bestRank.classId === 0 ? "Heart 3" : "Heart 8";
@@ -326,31 +327,18 @@
             return null;
         }
 
-        // SÜRÜM 42 ÖZEL: %33'lük Kırpma (Zoom) Alanını Gerçek Canvas Boyutuna Hatasız İzdüşüren Yeni Formül
-        function getBoxDataZoom(data, i, canvasWidth, canvasHeight, label, score, classId) {
+        function getBoxData(data, i, scale, xOffset, yOffset, label, score, classId) {
             const numBoxes = 8400;
-            let cx = data[0 * numBoxes + i]; // 0-640 arası model X
-            let cy = data[1 * numBoxes + i]; // 0-640 arası model Y
-            let w  = data[2 * numBoxes + i]; // 0-640 arası model W
-            let h  = data[3 * numBoxes + i]; // 0-640 arası model H
-
-            // Model içindeki (640x640) oranları normale döküyoruz
-            let normCX = cx / 640;
-            let normCY = cy / 640;
-            let normW  = w / 640;
-            let normH  = h / 640;
-
-            // Kural: %33'lük kırpma alanına göre canvas piksellerini hesapla
-            let actualW = normW * (canvasWidth * 0.33);
-            let actualH = normH * (canvasHeight * 0.33);
-            let actualX = (normCX - normW / 2) * (canvasWidth * 0.33);
-            let actualY = (normCY - normH / 2) * (canvasHeight * 0.33);
+            let cx = data[0 * numBoxes + i];
+            let cy = data[1 * numBoxes + i];
+            let w  = data[2 * numBoxes + i];
+            let h  = data[3 * numBoxes + i];
 
             return {
-                x: actualX,
-                y: actualY,
-                w: actualW,
-                h: actualH,
+                x: ((cx - (w / 2)) - xOffset) / scale,
+                y: ((cy - (h / 2)) - yOffset) / scale,
+                w: w / scale,
+                h: h / scale,
                 label: label,
                 score: score,
                 classId: classId
