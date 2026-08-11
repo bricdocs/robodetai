@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 49.1 (YOLOv8 Core & Büyük Text)</title>
+    <title>Bric Barkod - Versiyon 49.2 (YOLOv8 Fixed Core)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -34,7 +34,7 @@
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
     <div id="debug-panel">
-        <div>[BRIC BARKOD V49.1 - YOLOv8 640x640 NET MOD]</div>
+        <div>[BRIC BARKOD V49.2 - YOLOv8 FIXED]</div>
         <div id="fps">FPS: --</div>
         <div id="status">Sistem başlatılıyor...</div>
     </div>
@@ -76,7 +76,7 @@
         try {
             statusDiv.innerText = "YOLOv8 640x640 ONNX yerel hafızaya yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V49.1 Makro Pencere Modu Aktif. Jilet gibi net özgür ekran...";
+            statusDiv.innerText = "V49.2 Makro Pencere Modu Aktif. Jilet gibi net özgür ekran...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -105,14 +105,16 @@
         interleaved.set(r, 0);
         interleaved.set(g, 640 * 640);
         interleaved.set(b, 2 * 640 * 640);
-        return new ort.Tensor('float32', interleaved,);
+        
+        // Model matris uyumu için boyut dizisi kilitlendi
+        return new ort.Tensor('float32', interleaved, [1, 3, 640, 640]);
     }
 
     async function detectFrame() {
         const now = Date.now();
         const fps = Math.round(1000 / (now - lastFrameTime));
         lastFrameTime = now;
-        fpsDiv.innerText = `FPS: ${fps} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (YOLOv8 Kıyaslama)`;
+        fpsDiv.innerText = `FPS: ${fps} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (YOLOv8 Fixed)`;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         if (onnxSession) {
@@ -146,12 +148,12 @@
                     const topY = bestBox.y - bestBox.h / 2;
                     const correctedX = canvas.width - bestBox.x - (bestBox.w / 2);
                     
-                    // ROI Kutusu Çizimi
+                    // ROI Kutusu
                     ctx.strokeStyle = "#00ff00";
                     ctx.lineWidth = 4;
                     ctx.strokeRect(correctedX, topY, bestBox.w, bestBox.h);
                     
-                    // Sadece Değişen Alan: Telefonlar için %60'tan fazla büyütülmüş metin
+                    // Telefonlar için büyütülmüş metin
                     ctx.fillStyle = "#00ff00";
                     ctx.font = "bold 28px monospace"; 
                     const textY = topY > 35 ? topY - 12 : 30;
