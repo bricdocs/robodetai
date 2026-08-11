@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 49 (YOLOv8 Core & Ayna Sabitli)</title>
+    <title>Bric Barkod - Versiyon 49.1 (YOLOv8 Core & Büyük Text)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -34,7 +34,7 @@
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
     <div id="debug-panel">
-        <div>[BRIC BARKOD V49 - YOLOv8 640x640 NET MOD]</div>
+        <div>[BRIC BARKOD V49.1 - YOLOv8 640x640 NET MOD]</div>
         <div id="fps">FPS: --</div>
         <div id="status">Sistem başlatılıyor...</div>
     </div>
@@ -50,7 +50,7 @@
     let onnxSession = null;
     let lastFrameTime = Date.now();
     const DISPLAY_LABEL = 'Kupa 8';
-    const CONFIDENCE_THRESHOLD = 0.15; // Emanet edilen %15 esnek test eşiği
+    const CONFIDENCE_THRESHOLD = 0.15; 
  
     async function setupWebcam() {
         const constraints = {
@@ -76,7 +76,7 @@
         try {
             statusDiv.innerText = "YOLOv8 640x640 ONNX yerel hafızaya yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V49 Makro Pencere Modu Aktif. Jilet gibi net özgür ekran...";
+            statusDiv.innerText = "V49.1 Makro Pencere Modu Aktif. Jilet gibi net özgür ekran...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -105,7 +105,7 @@
         interleaved.set(r, 0);
         interleaved.set(g, 640 * 640);
         interleaved.set(b, 2 * 640 * 640);
-        return new ort.Tensor('float32', interleaved, [1, 3, 640, 640]);
+        return new ort.Tensor('float32', interleaved,);
     }
 
     async function detectFrame() {
@@ -118,16 +118,16 @@
         if (onnxSession) {
             try {
                 const inputTensor = preprocess(video);
-                const outputMap = await onnxSession.run({ [onnxSession.inputNames[0]]: inputTensor });
-                const outputTensor = outputMap[onnxSession.outputNames[0]];
+                const outputMap = await onnxSession.run({ [onnxSession.inputNames]: inputTensor });
+                const outputTensor = outputMap[onnxSession.outputNames];
                 const rawData = outputTensor.data;
                 
                 let bestScore = 0;
                 let bestBox = null;
-                const numBoxes = outputTensor.dims[2]; // Sabit 8400 grid/kutu yapısı
+                const numBoxes = outputTensor.dims; 
                 
                 for (let i = 0; i < numBoxes; i++) {
-                    let score = rawData[4 * numBoxes + i]; // Tek sınıf (Kupa 8) skoru
+                    let score = rawData[4 * numBoxes + i]; 
                     if (score > CONFIDENCE_THRESHOLD && score > bestScore) {
                         bestScore = score;
                         bestBox = {
@@ -143,19 +143,19 @@
                     resultBadge.innerText = DISPLAY_LABEL;
                     resultBadge.style.display = "block";
                     
-                    // --- KRİTİK AYNAlAMA VE SAĞA KAYMA DÜZELTMESİ ---
-                    // Merkez X noktasını ayna koordinatına alıp genişliğin yarısını düşüyoruz.
-                    // Bu matematiksel senkronizasyon horizontal (yatay) kayma sapmasını milimetrik sıfırlar.
                     const topY = bestBox.y - bestBox.h / 2;
                     const correctedX = canvas.width - bestBox.x - (bestBox.w / 2);
                     
+                    // ROI Kutusu Çizimi
                     ctx.strokeStyle = "#00ff00";
                     ctx.lineWidth = 4;
                     ctx.strokeRect(correctedX, topY, bestBox.w, bestBox.h);
                     
+                    // Sadece Değişen Alan: Telefonlar için %60'tan fazla büyütülmüş metin
                     ctx.fillStyle = "#00ff00";
-                    ctx.font = "bold 16px monospace";
-                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, topY > 20 ? topY - 10 : 20);
+                    ctx.font = "bold 28px monospace"; 
+                    const textY = topY > 35 ? topY - 12 : 30;
+                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, textY);
                 } else {
                     resultBadge.style.display = "none";
                 }
