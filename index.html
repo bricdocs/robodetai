@@ -158,8 +158,13 @@
                     ctx.strokeRect(correctedX, topY, bestBox.w, bestBox.h);
                     
                     ctx.fillStyle = "#00ff00";
-                    ctx.font = "bold 16px monospace";
-                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, topY > 20 ? topY - 10 : 20);
+                    // YAZI BOYUTU %120 ARTTIRILDI (16px -> 35px yapıldı)
+                    ctx.font = "bold 35px monospace"; 
+
+                    // Yazı büyüdüğü için ekranın en tepesine çarptığında yukarı taşmasını önleyen güvenli dikey konumlandırma
+                    const safeTextY = topY > 45 ? topY - 15 : 45;
+                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, safeTextY);
+
                 } else {
                     resultBadge.style.display = "none";
                 }
