@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 49.1 (YOLOv8 Core & Büyük Text)</title>
+    <title>Bric Barkod - Versiyon 49 (YOLOv8 Core & Ayna Sabitli)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -50,7 +50,7 @@
     let onnxSession = null;
     let lastFrameTime = Date.now();
     const DISPLAY_LABEL = 'Kupa 8';
-    const CONFIDENCE_THRESHOLD = 0.15; 
+    const CONFIDENCE_THRESHOLD = 0.15; // Emanet edilen %15 esnek test eşiği
  
     async function setupWebcam() {
         const constraints = {
@@ -85,31 +85,28 @@
         }
     }
 
-function preprocess(videoElement) {
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = 640;
-    tempCanvas.height = 640;
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.drawImage(videoElement, 0, 0, 640, 640);
-    const imgData = tempCtx.getImageData(0, 0, 640, 640);
-    const { data } = imgData;
-    const r = new Float32Array(640 * 640);
-    const g = new Float32Array(640 * 640);
-    const b = new Float32Array(640 * 640);
-    for (let i = 0, idx = 0; i < data.length; i += 4, idx++) {
-        r[idx] = data[i] / 255.0;
-        g[idx] = data[i+1] / 255.0;
-        b[idx] = data[i+2] / 255.0;
+    function preprocess(videoElement) {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 640;
+        tempCanvas.height = 640;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(videoElement, 0, 0, 640, 640);
+        const imgData = tempCtx.getImageData(0, 0, 640, 640);
+        const { data } = imgData;
+        const r = new Float32Array(640 * 640);
+        const g = new Float32Array(640 * 640);
+        const b = new Float32Array(640 * 640);
+        for (let i = 0, idx = 0; i < data.length; i += 4, idx++) {
+            r[idx] = data[i] / 255.0;
+            g[idx] = data[i+1] / 255.0;
+            b[idx] = data[i+2] / 255.0;
+        }
+        const interleaved = new Float32Array(1 * 3 * 640 * 640);
+        interleaved.set(r, 0);
+        interleaved.set(g, 640 * 640);
+        interleaved.set(b, 2 * 640 * 640);
+        return new ort.Tensor('float32', interleaved, [1, 3, 640, 640]);
     }
-    const interleaved = new Float32Array(1 * 3 * 640 * 640);
-    interleaved.set(r, 0);
-    interleaved.set(g, 640 * 640);
-    interleaved.set(b, 2 * 640 * 640);
-    
-    // DÜZELTME: ONNX Runtime Web'e bu dizinin [1, 3, 640, 640] formatında bir resim matrisi olduğunu bildiriyoruz.
-    return new ort.Tensor('float32', interleaved, [1, 3, 640, 640]);
-}
-
 
     async function detectFrame() {
         const now = Date.now();
@@ -121,16 +118,16 @@ function preprocess(videoElement) {
         if (onnxSession) {
             try {
                 const inputTensor = preprocess(video);
-                const outputMap = await onnxSession.run({ [onnxSession.inputNames]: inputTensor });
-                const outputTensor = outputMap[onnxSession.outputNames];
+                const outputMap = await onnxSession.run({ [onnxSession.inputNames[0]]: inputTensor });
+                const outputTensor = outputMap[onnxSession.outputNames[0]];
                 const rawData = outputTensor.data;
                 
                 let bestScore = 0;
                 let bestBox = null;
-                const numBoxes = outputTensor.dims; 
+                const numBoxes = outputTensor.dims[2]; // Sabit 8400 grid/kutu yapısı
                 
                 for (let i = 0; i < numBoxes; i++) {
-                    let score = rawData[4 * numBoxes + i]; 
+                    let score = rawData[4 * numBoxes + i]; // Tek sınıf (Kupa 8) skoru
                     if (score > CONFIDENCE_THRESHOLD && score > bestScore) {
                         bestScore = score;
                         bestBox = {
@@ -146,6 +143,9 @@ function preprocess(videoElement) {
                     resultBadge.innerText = DISPLAY_LABEL;
                     resultBadge.style.display = "block";
                     
+                    // --- KRİTİK AYNAlAMA VE SAĞA KAYMA DÜZELTMESİ ---
+                    // Merkez X noktasını ayna koordinatına alıp genişliğin yarısını düşüyoruz.
+                    // Bu matematiksel senkronizasyon horizontal (yatay) kayma sapmasını milimetrik sıfırlar.
                     const topY = bestBox.y - bestBox.h / 2;
                     const correctedX = canvas.width - bestBox.x - (bestBox.w / 2);
                     
@@ -154,9 +154,8 @@ function preprocess(videoElement) {
                     ctx.strokeRect(correctedX, topY, bestBox.w, bestBox.h);
                     
                     ctx.fillStyle = "#00ff00";
-                    ctx.font = "bold 35px monospace"; 
-                    const textY = topY > 45 ? topY - 15 : 45;
-                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, textY);
+                    ctx.font = "bold 16px monospace";
+                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, topY > 20 ? topY - 10 : 20);
                 } else {
                     resultBadge.style.display = "none";
                 }
