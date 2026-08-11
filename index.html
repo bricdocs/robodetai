@@ -123,3 +123,161 @@
             statusDiv.style.color = "#ff0000";
         }
     }
+
+    function preprocess(videoElement) {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 640;
+        tempCanvas.height = 640;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(videoElement, 0, 0, 640, 640);
+        
+        const imgData = tempCtx.getImageData(0, 0, 640, 640);
+        const { data } = imgData;
+        
+        const r = new Float32Array(640 * 640);
+        const g = new Float32Array(640 * 640);
+        const b = new Float32Array(640 * 640);
+        
+        for (let i = 0, idx = 0; i < data.length; i += 4, idx++) {
+            r[idx] = data[i] / 255.0;
+            g[idx] = data[i+1] / 255.0;
+            b[idx] = data[i+2] / 255.0;
+        }
+        
+        const interleaved = new Float32Array(1 * 3 * 640 * 640);
+        interleaved.set(r, 0);
+        interleaved.set(g, 640 * 640);
+        interleaved.set(b, 2 * 640 * 640);
+        
+        return new ort.Tensor('float32', interleaved,);
+    }
+
+    async function detectFrame() {
+        const now = Date.now();
+        const fps = Math.round(1000 / (now - lastFrameTime));
+        lastFrameTime = now;
+        fpsDiv.innerText = `FPS: ${fps} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (V48 Çekirdek)`;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (onnxSession) {
+            try {
+                const inputTensor = preprocess(video);
+                const outputMap = await onnxSession.run({ [onnxSession.inputNames]: inputTensor });
+                const outputTensor = outputMap[onnxSession.outputNames];
+                const rawData = outputTensor.data;
+
+                let bestScore = 0;
+                let bestBox = null;
+
+                const numBoxes = outputTensor.dims; 
+                for (let i = 0; i < numBoxes; i++) {
+                    let score = rawData[4 * numBoxes + i]; 
+                    if (score > CONFIDENCE_THRESHOLD && score > bestScore) {
+                        bestScore = score;
+                        bestBox = {
+                            x: (rawData[i] / 640) * canvas.width,
+                            y: (rawData[numBoxes + i] / 640) * canvas.height,
+                            w: (rawData[2 * numBoxes + i] / 640) * canvas.width,
+                            h: (rawData[3 * numBoxes + i] / 640) * canvas.height
+                        };
+                    }
+                }
+
+                if (bestBox) {
+                    resultBadge.innerText = DISPLAY_LABEL;
+                    resultBadge.style.display = "block";
+
+                    const leftX = bestBox.x - bestBox.w / 2;
+                    const topY = bestBox.y - bestBox.h / 2;
+                    const correctedX = canvas.width - leftX - bestBox.w; 
+
+                    const d = new Date();
+                    const timestamp = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}.${d.getMilliseconds().toString().padStart(3,'0')}`;
+
+                    let currentZoom = "1.0x";
+                    try {
+                        if (streamTrack && typeof streamTrack.getSettings === "function") {
+                            const settings = streamTrack.getSettings();
+                            if (settings.zoom) {
+                                currentZoom = settings.zoom.toFixed(1) + "x";
+                            }
+                        }
+                    } catch (zoomErr) {
+                        currentZoom = "Bilinmiyor";
+                    }
+
+                    const refPixelWidth = 220; 
+                    const refDistance = 15;   
+                    let estimatedDistance = Math.round((refPixelWidth / bestBox.w) * refDistance);
+                    
+                    if (estimatedDistance < 5) estimatedDistance = "~5 cm";
+                    else if (estimatedDistance > 50) estimatedDistance = ">50 cm";
+                    else estimatedDistance = `~${estimatedDistance} cm`;
+
+                    csvDataLog.push({
+                        Zaman: timestamp,
+                        Sinif: "8_heart",
+                        Rank: "8",
+                        Suit: "Heart",
+                        Guven: `%${Math.round(bestScore * 100)}`,
+                        Mesafe: estimatedDistance,
+                        Zoom: currentZoom
+                    });
+
+                    ctx.strokeStyle = "#00ff00";
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(correctedX, topY, bestBox.w, bestBox.h);
+
+                    ctx.fillStyle = "#00ff00";
+                    ctx.font = "bold 16px monospace";
+                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, topY > 20 ? topY - 10 : 20);
+                } else {
+                    resultBadge.style.display = "none";
+                }
+            } catch (inferError) {
+                // Sessiz geçiş
+            }
+        }
+
+        requestAnimationFrame(detectFrame);
+    }
+
+    function downloadCSV() {
+        if (csvDataLog.length === 0) {
+            alert("Henüz hafızada kayıtlı veri yok! Lütfen kameraya Kupa 8 kartını gösterip veri biriktirin.");
+            return;
+        }
+
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+        csvContent += "Zaman,Sınıf (Class),Rank,Suit,Güven Oranı (%),Tahmini Uzaklık,Ön Kamera Zoom\n";
+
+        csvDataLog.forEach(row => {
+            const line = `"${row.Zaman}","${row.Sinif}","${row.Rank}","${row.Suit}","${row.Guven}","${row.Mesafe}","${row.Zoom}"`;
+            csvContent += line + "\n";
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        
+        const now = new Date();
+        const fileName = `bric_v48_test_${now.getHours()}_${now.getMinutes()}.csv`;
+        link.setAttribute("download", fileName);
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        statusDiv.innerText = `BAŞARILI! ${csvDataLog.length} satırlık test raporu cihaza indirildi.`;
+        statusDiv.style.color = "#ffff00";
+    }
+
+    window.onload = async () => {
+        await setupWebcam();
+        await loadModel();
+    };
+</script>
+
+</body>
+</html>
