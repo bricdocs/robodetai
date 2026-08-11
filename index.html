@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 48.2 (CSV Koruma Modu)</title>
+    <title>Bric Barkod - Versiyon 48.3 (Akıllı Excel Filtresi)</title>
 
     <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
     <script>
@@ -16,6 +16,8 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
         #container { position: relative; width: 100%; height: 100%; }
+        
+        /* v48 Jilet gibi net yüksek çözünürlüklü tam ekran kamera akışı */
         video { width: 100%; height: 100%; object-fit: cover; position: absolute; transform: scaleX(-1); } 
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
         
@@ -31,6 +33,8 @@
             font-size: 24px; border-radius: 50px; z-index: 20; display: none;
             box-shadow: 0 0 20px #00ff00; text-transform: uppercase;
         }
+        
+        /* Şık ve Ekran Özgürlüğünü Bozmayan Şeffaf CSV Butonu */
         #csv-btn {
             position: absolute; top: 85px; right: 15px;
             background: rgba(0, 255, 0, 0.2); color: #00ff00; 
@@ -52,7 +56,7 @@
     <canvas id="overlay"></canvas>
     
     <div id="debug-panel">
-        <div>[BRIC BARKOD V48.2 - SECURE CSV]</div>
+        <div>[BRIC BARKOD V48.3 - LIGHT CSV]</div>
         <div id="fps">FPS: --</div>
         <div id="status">Sistem başlatılıyor...</div>
     </div>
@@ -72,10 +76,12 @@
     let onnxSession = null;
     let lastFrameTime = Date.now();
     let streamTrack = null; 
-    let csvDataLog = [];
+    
+    // Sizin Düşünceniz: Canlı döngüyü yormayan, sadece ham skorları ve kutuları tutan ultra hafif depo
+    let rawScoresLog = [];
     
     const DISPLAY_LABEL = 'Kupa 8';
-    const CONFIDENCE_THRESHOLD = 0.15; 
+    const CONFIDENCE_THRESHOLD = 0.15; // v48 %15 esnek eşik değeri milimetrik korundu
 
     async function setupWebcam() {
         const constraints = {
@@ -86,7 +92,6 @@
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             video.srcObject = stream;
             
-            // Kamera izini hata fırlatmasını önleyecek şekilde esnek yakalıyoruz
             try {
                 if (stream && typeof stream.getVideoTracks === "function") {
                     const tracks = stream.getVideoTracks();
@@ -94,9 +99,7 @@
                         streamTrack = tracks[0];
                     }
                 }
-            } catch (trackErr) {
-                console.log("Track izleme pas geçildi:", trackErr);
-            }
+            } catch (e) {}
 
             return new Promise((resolve) => {
                 video.onloadedmetadata = () => {
@@ -106,8 +109,7 @@
                 };
             });
         } catch (err) {
-            statusDiv.innerText = "Kamera Başlatılamadı! Lütfen tarayıcıdan kamera izni verin: " + err.message;
-            statusDiv.style.color = "#ff0000";
+            statusDiv.innerText = "Kamera Hatası: " + err.message;
         }
     }
 
@@ -115,7 +117,7 @@
         try {
             statusDiv.innerText = "640x640 ONNX yerel hafızaya yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "Kamera Koruması Aktif. Kupa 8 Aranıyor...";
+            statusDiv.innerText = "v48 Keskinliği Aktif. Hafif Kayıt Hazır. Kupa 8 Aranıyor...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -156,7 +158,7 @@
         const now = Date.now();
         const fps = Math.round(1000 / (now - lastFrameTime));
         lastFrameTime = now;
-        fpsDiv.innerText = `FPS: ${fps} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (V48 Çekirdek)`;
+        fpsDiv.innerText = `FPS: ${fps} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (v48 Kalitesi)`;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -170,7 +172,7 @@
                 let bestScore = 0;
                 let bestBox = null;
 
-                const numBoxes = outputTensor.dims; 
+                const numBoxes = outputTensor.dims[2]; 
                 for (let i = 0; i < numBoxes; i++) {
                     let score = rawData[4 * numBoxes + i]; 
                     if (score > CONFIDENCE_THRESHOLD && score > bestScore) {
@@ -184,6 +186,7 @@
                     }
                 }
 
+                // Orijinal v48 Bütünsel ROI Kutusu Çizimi (Milisaniyede Ekrandadır)
                 if (bestBox) {
                     resultBadge.innerText = DISPLAY_LABEL;
                     resultBadge.style.display = "block";
@@ -192,37 +195,11 @@
                     const topY = bestBox.y - bestBox.h / 2;
                     const correctedX = canvas.width - leftX - bestBox.w; 
 
-                    const d = new Date();
-                    const timestamp = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}.${d.getMilliseconds().toString().padStart(3,'0')}`;
-
-                    let currentZoom = "1.0x";
-                    try {
-                        if (streamTrack && typeof streamTrack.getSettings === "function") {
-                            const settings = streamTrack.getSettings();
-                            if (settings.zoom) {
-                                currentZoom = settings.zoom.toFixed(1) + "x";
-                            }
-                        }
-                    } catch (zoomErr) {
-                        currentZoom = "Bilinmiyor";
-                    }
-
-                    const refPixelWidth = 220; 
-                    const refDistance = 15;   
-                    let estimatedDistance = Math.round((refPixelWidth / bestBox.w) * refDistance);
-                    
-                    if (estimatedDistance < 5) estimatedDistance = "~5 cm";
-                    else if (estimatedDistance > 50) estimatedDistance = ">50 cm";
-                    else estimatedDistance = `~${estimatedDistance} cm`;
-
-                    csvDataLog.push({
-                        Zaman: timestamp,
-                        Sinif: "8_heart",
-                        Rank: "8",
-                        Suit: "Heart",
-                        Guven: `%${Math.round(bestScore * 100)}`,
-                        Mesafe: estimatedDistance,
-                        Zoom: currentZoom
+                    // İŞLEMCİYİ YORMUYAN ULTRA HAFİF ANLIK SKOR KAYDI (Sizin Dahice Fikriniz)
+                    // Sadece o karedeki ham skoru ve kutu genişliğini arkaya atıyoruz. Canlı hesaplama yok!
+                    rawScoresLog.push({
+                        score: bestScore,
+                        boxW: bestBox.w
                     });
 
                     ctx.strokeStyle = "#00ff00";
@@ -243,17 +220,44 @@
         requestAnimationFrame(detectFrame);
     }
 
+    // --- 💾 BUTONA BASILDIĞI AN (SON SANİYEDE) EXCEL YAPILANDIRMA MOTORU ---
     function downloadCSV() {
-        if (csvDataLog.length === 0) {
-            alert("Henüz hafızada kayıtlı veri yok! Lütfen kameraya Kupa 8 kartını gösterip veri biriktirin.");
+        if (rawScoresLog.length === 0) {
+            alert("Henüz hafızada kayıtlı veri yok! Lütfen kameraya Kupa 8 kartını gösterip yüzde skorları biriktirin.");
             return;
         }
 
         let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
-        csvContent += "Zaman,Sınıf (Class),Rank,Suit,Güven Oranı (%),Tahmini Uzaklık,Ön Kamera Zoom\n";
+        csvContent += "Sıra,Zaman Damgası,Sınıf (Class),Rank,Suit,Ekranda Görünen Güven Oranı (%),Tahmini Uzaklık,Ön Kamera Zoom\n";
 
-        csvDataLog.forEach(row => {
-            const line = `"${row.Zaman}","${row.Sinif}","${row.Rank}","${row.Suit}","${row.Guven}","${row.Mesafe}","${row.Zoom}"`;
+        // Donanımsal zoom oranını sadece indirme anında 1 kez çekiyoruz
+        let currentZoom = "1.0x";
+        try {
+            if (streamTrack && typeof streamTrack.getSettings === "function") {
+                const settings = streamTrack.getSettings();
+                if (settings.zoom) {
+                    currentZoom = settings.zoom.toFixed(1) + "x";
+                }
+            }
+        } catch (e) {}
+
+        // İndirme anındaki genel zaman referansı
+        const d = new Date();
+        const baseTime = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
+
+        // Hafızada biriken ham skorları sadece şimdi sıralı satırlara dönüştürüyoruz!
+        rawScoresLog.forEach((item, index) => {
+            let percentage = `%${Math.round(item.score * 100)}`;
+            
+            // Kutu genişliğine göre mesafe simülasyonu
+            const refPixelWidth = 220; 
+            const refDistance = 15;   
+            let estimatedDistance = Math.round((refPixelWidth / item.boxW) * refDistance);
+            if (estimatedDistance < 5) estimatedDistance = "~5 cm";
+            else if (estimatedDistance > 50) estimatedDistance = ">50 cm";
+            else estimatedDistance = `~${estimatedDistance} cm`;
+
+            const line = `"${index + 1}","${baseTime}","8_heart","8","Heart","${percentage}","${estimatedDistance}","${currentZoom}"`;
             csvContent += line + "\n";
         });
 
@@ -261,15 +265,14 @@
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
         
-        const now = new Date();
-        const fileName = `bric_v48_test_${now.getHours()}_${now.getMinutes()}.csv`;
+        const fileName = `bric_v48_skor_raporu_${d.getHours()}_${d.getMinutes()}.csv`;
         link.setAttribute("download", fileName);
         
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         
-        statusDiv.innerText = `BAŞARILI! ${csvDataLog.length} satırlık test raporu cihaza indirildi.`;
+        statusDiv.innerText = `BAŞARILI! ${rawScoresLog.length} adet sıralı yüzde skoru cihaza indirildi.`;
         statusDiv.style.color = "#ffff00";
     }
 
