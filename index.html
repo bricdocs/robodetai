@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 49 (YOLOv8 Core & Ayna Sabitli)</title>
+    <title>Bric Barkod - Versiyon 49.1 (YOLOv8 Core & Ayna Sabitli)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -21,12 +21,16 @@
             border-radius: 8px; font-family: monospace; font-size: 13px; z-index: 20;
             border: 1px solid #00ff00; pointer-events: none;
         }
-        #result-badge {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: #00ff00; color: #000; padding: 15px 30px; font-weight: bold;
-            font-size: 24px; border-radius: 50px; z-index: 20; display: none;
-            box-shadow: 0 0 20px #00ff00; text-transform: uppercase;
-        }
+#result-badge {
+    position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+    background: #00ff00; color: #000; 
+    padding: 20px 40px; /* Yazı büyüdüğü için kutu payını hafifçe artırdık */
+    font-weight: bold;
+    font-size: 38px;    /* Yazı boyutu cep telefonu için %60 artırıldı (24px -> 38px) */
+    border-radius: 50px; z-index: 20; display: none;
+    box-shadow: 0 0 20px #00ff00; text-transform: uppercase;
+}
+
     </style>
 </head>
 <body>
