@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bric Barkod - Versiyon 49 (YOLOv8 Core & Büyük Text)</title>
+    <script>
+        var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
+        var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
+        document.write('<script src="https://' + onnx_part1 + onnx_part2 + '"><\/script>');
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
+        #container { position: relative; width: 100%; height: 100%; }
+        video { width: 100%; height: 100%; object-fit: cover; position: absolute; transform: scaleX(-1); } 
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        #debug-panel {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            background: rgba(0, 0, 0, 0.75); color: #00ff00; padding: 12px;
+            border-radius: 8px; font-family: monospace; font-size: 13px; z-index: 20;
+            border: 1px solid #00ff00; pointer-events: none;
+        }
+        #result-badge {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: #00ff00; color: #000; padding: 15px 30px; font-weight: bold;
+            font-size: 24px; border-radius: 50px; z-index: 20; display: none;
+            box-shadow: 0 0 20px #00ff00; text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div id="debug-panel">
+        <div>[BRIC BARKOD V49 - YOLOv8 640x640 NET MOD]</div>
+        <div id="fps">FPS: --</div>
+        <div id="status">Sistem başlatılıyor...</div>
+    </div>
+    <div id="result-badge">---</div>
+</div>
+<script>
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('overlay');
+    const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('status');
+    const fpsDiv = document.getElementById('fps');
+    const resultBadge = document.getElementById('result-badge');
+    let onnxSession = null;
+    let lastFrameTime = Date.now();
+    const DISPLAY_LABEL = 'Kupa 8';
+    const CONFIDENCE_THRESHOLD = 0.15; 
+ 
+    async function setupWebcam() {
+        const constraints = {
+            video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } },
+            audio: false
+        };
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    resolve();
+                };
+            });
+        } catch (err) {
+            statusDiv.innerText = "Kamera Hatası: " + err.message;
+        }
+    }
+
+    async function loadModel() {
+        try {
+            statusDiv.innerText = "YOLOv8 640x640 ONNX yerel hafızaya yükleniyor...";
+            onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
+            statusDiv.innerText = "V49 Makro Pencere Modu Aktif. Jilet gibi net özgür ekran...";
+            statusDiv.style.color = "#00ff00";
+            detectFrame();
+        } catch (err) {
+            statusDiv.innerText = "Model Yükleme Hatası: " + err.message;
+            statusDiv.style.color = "#ff0000";
+        }
+    }
+
+    function preprocess(videoElement) {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 640;
+        tempCanvas.height = 640;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(videoElement, 0, 0, 640, 640);
+        const imgData = tempCtx.getImageData(0, 0, 640, 640);
+        const { data } = imgData;
+        const r = new Float32Array(640 * 640);
+        const g = new Float32Array(640 * 640);
+        const b = new Float32Array(640 * 640);
+        for (let i = 0, idx = 0; i < data.length; i += 4, idx++) {
+            r[idx] = data[i] / 255.0;
+            g[idx] = data[i+1] / 255.0;
+            b[idx] = data[i+2] / 255.0;
+        }
+        const interleaved = new Float32Array(1 * 3 * 640 * 640);
+        interleaved.set(r, 0);
+        interleaved.set(g, 640 * 640);
+        interleaved.set(b, 2 * 640 * 640);
+        return new ort.Tensor('float32', interleaved,);
+    }
+
+    async function detectFrame() {
+        const now = Date.now();
+        const fps = Math.round(1000 / (now - lastFrameTime));
+        lastFrameTime = now;
+        fpsDiv.innerText = `FPS: ${fps} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (YOLOv8 Kıyaslama)`;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        if (onnxSession) {
+            try {
+                const inputTensor = preprocess(video);
+                const outputMap = await onnxSession.run({ [onnxSession.inputNames]: inputTensor });
+                const outputTensor = outputMap[onnxSession.outputNames];
+                const rawData = outputTensor.data;
+                
+                let bestScore = 0;
+                let bestBox = null;
+                const numBoxes = outputTensor.dims; 
+                
+                for (let i = 0; i < numBoxes; i++) {
+                    let score = rawData[4 * numBoxes + i]; 
+                    if (score > CONFIDENCE_THRESHOLD && score > bestScore) {
+                        bestScore = score;
+                        bestBox = {
+                            x: (rawData[i] / 640) * canvas.width,
+                            y: (rawData[numBoxes + i] / 640) * canvas.height,
+                            w: (rawData[2 * numBoxes + i] / 640) * canvas.width,
+                            h: (rawData[3 * numBoxes + i] / 640) * canvas.height
+                        };
+                    }
+                }
+                
+                if (bestBox) {
+                    resultBadge.innerText = DISPLAY_LABEL;
+                    resultBadge.style.display = "block";
+                    
+                    const topY = bestBox.y - bestBox.h / 2;
+                    const correctedX = canvas.width - bestBox.x - (bestBox.w / 2);
+                    
+                    ctx.strokeStyle = "#00ff00";
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(correctedX, topY, bestBox.w, bestBox.h);
+                    
+                    ctx.fillStyle = "#00ff00";
+                    ctx.font = "bold 35px monospace"; 
+                    const textY = topY > 45 ? topY - 15 : 45;
+                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, textY);
+                } else {
+                    resultBadge.style.display = "none";
+                }
+            } catch (inferError) {
+                console.error("Çıkarım Hatası:", inferError);
+            }
+        }
+        requestAnimationFrame(detectFrame);
+    }
+    
+    window.onload = async () => {
+        await setupWebcam();
+        await loadModel();
+    };
+</script>
+</body>
+</html>
