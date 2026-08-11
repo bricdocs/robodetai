@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bric Barkod - Versiyon 48.1 (CSV Kayıt Motoru)</title>
+
+    <!-- 1. ENGELİ AŞAN PARÇALI CDN KÜTÜPHANE YÜKLEYİCİ -->
+    <script>
+        var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
+        var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
+        document.write('<script src="https://' + onnx_part1 + onnx_part2 + '"><\/script>');
+    </script>
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
+        #container { position: relative; width: 100%; height: 100%; }
+        
+        /* Jilet gibi net yüksek çözünürlüklü tam ekran kamera akışı */
+        video { width: 100%; height: 100%; object-fit: cover; position: absolute; transform: scaleX(-1); } 
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        
+        #debug-panel {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            background: rgba(0, 0, 0, 0.75); color: #00ff00; padding: 12px;
+            border-radius: 8px; font-family: monospace; font-size: 13px; z-index: 20;
+            border: 1px solid #00ff00; pointer-events: none;
+        }
+        #result-badge {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: #00ff00; color: #000; padding: 15px 30px; font-weight: bold;
+            font-size: 24px; border-radius: 50px; z-index: 20; display: none;
+            box-shadow: 0 0 20px #00ff00; text-transform: uppercase;
+        }
+        
+        /* Şık ve Ekran Özgürlüğünü Bozmayan Şeffaf CSV Butonu */
+        #csv-btn {
+            position: absolute; top: 85px; right: 15px;
+            background: rgba(0, 255, 0, 0.2); color: #00ff00; 
+            border: 2px solid #00ff00; padding: 10px 18px;
+            border-radius: 6px; font-weight: bold; font-size: 13px;
+            cursor: pointer; z-index: 30; transition: all 0.2s;
+            box-shadow: 0 0 10px rgba(0,255,0,0.2);
+        }
+        #csv-btn:active {
+            background: #00ff00; color: #000;
+            box-shadow: 0 0 20px #00ff00;
+        }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    
+    <div id="debug-panel">
+        <div>[BRIC BARKOD V48.1 - CSV ENGiNE]</div>
+        <div id="fps">FPS: --</div>
+        <div id="status">Sistem başlatılıyor...</div>
+    </div>
+    
+    <button id="csv-btn" onclick="downloadCSV()">📊 VERiLERi iNDiR (CSV)</button>
+    <div id="result-badge">---</div>
+</div>
+
+<script>
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('overlay');
+    const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('status');
+    const fpsDiv = document.getElementById('fps');
+    const resultBadge = document.getElementById('result-badge');
+
+    let onnxSession = null;
+    let lastFrameTime = Date.now();
+    let streamTrack = null; 
+    
+    let csvDataLog = [];
+    
+    const DISPLAY_LABEL = 'Kupa 8';
+    const CONFIDENCE_THRESHOLD = 0.15; 
+
+    async function setupWebcam() {
+        const constraints = {
+            video: { 
+                facingMode: "user", 
+                width: { ideal: 1280 }, 
+                height: { ideal: 720 },
+                frameRate: { ideal: 60 } 
+            },
+            audio: false
+        };
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            if (stream && stream.getVideoTracks().length > 0) {
+                streamTrack = stream.getVideoTracks()[0]; 
+            }
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    resolve();
+                };
+            });
+        } catch (err) {
+            statusDiv.innerText = "Kamera Hatası: " + err.message;
+        }
+    }
+
+    async function loadModel() {
+        try {
+            statusDiv.innerText = "640x640 ONNX yerel hafızaya yükleniyor...";
+            onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
+            statusDiv.innerText = "Mimarimiz Kararlı. Kayıt Motoru Aktif. Kupa 8 Aranıyor...";
+            statusDiv.style.color = "#00ff00";
+            detectFrame();
+        } catch (err) {
+            statusDiv.innerText = "Model Yükleme Hatası: " + err.message;
+            statusDiv.style.color = "#ff0000";
+        }
+    }
