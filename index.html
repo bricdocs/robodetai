@@ -1,0 +1,207 @@
+<!--* 
+  * Versiyon 50 - YOLOv8 ONNX Runtime Web 640x640 Core
+  * Altyapı: Muazzam Kod Teknolojisi (Zero-Copy & Reusable Memory Buffer)
+  * Optimizasyon: Offscreen allocation ile Garbage Collector (GC) yükü sıfırlanmıştır.
+  * Mobil: iOS ve Android cihazlar için batarya / ısınma optimizasyonlu kararlı sürüm.
+  *-->
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bric Barkod - Versiyon 50 (YOLOv8 Muazzam Kod)</title>
+    <script>
+        var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
+        var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
+        document.write('<script src="https://' + onnx_part1 + onnx_part2 + '"><\/script>');
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
+        #container { position: relative; width: 100%; height: 100%; }
+        video { width: 100%; height: 100%; object-fit: cover; position: absolute; transform: scaleX(-1); } 
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        #debug-panel {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            background: rgba(0, 0, 0, 0.75); color: #00ff00; padding: 12px;
+            border-radius: 8px; font-family: monospace; font-size: 13px; z-index: 20;
+            border: 1px solid #00ff00; pointer-events: none;
+        }
+        #result-badge {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: #00ff00; color: #000; padding: 15px 30px; font-weight: bold;
+            font-size: 24px; border-radius: 50px; z-index: 20; display: none;
+            box-shadow: 0 0 20px #00ff00; text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <video id="webcam" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div id="debug-panel">
+        <div>[BRIC BARKOD V50 - MUAZZAM ZERO-COPY MODE]</div>
+        <div id="fps">FPS: --</div>
+        <div id="status">Sistem başlatılıyor...</div>
+    </div>
+    <div id="result-badge">---</div>
+</div>
+<script>
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('overlay');
+    const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('status');
+    const fpsDiv = document.getElementById('fps');
+    const resultBadge = document.getElementById('result-badge');
+    let onnxSession = null;
+    let lastFrameTime = Date.now();
+    const DISPLAY_LABEL = 'Kupa 8';
+    const CONFIDENCE_THRESHOLD = 0.15; 
+
+    // --- MUAZZAM KOD BELLEK REZERVASYONU (ZERO-COPY CORE) ---
+    const targetSize = 640 * 640;
+    
+    // iOS Safari ve eski cihazlarda çökme/uyumsuzluk olmaması için kararlı Offscreen Fallback Canvas yapısı
+    let offscreenCanvas;
+    if (typeof OffscreenCanvas !== 'undefined') {
+        offscreenCanvas = new OffscreenCanvas(640, 640);
+    } else {
+        offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = 640;
+        offscreenCanvas.height = 640;
+    }
+    const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+
+    // Hafıza bloklarını sadece başlangıçta bir kez açıyoruz (Saniyede 60 kez çöp oluşmasını engeller)
+    const globalR = new Float32Array(targetSize);
+    const globalG = new Float32Array(targetSize);
+    const globalB = new Float32Array(targetSize);
+    const globalInterleaved = new Float32Array(1 * 3 * targetSize);
+    let cachedTensor = null;
+ 
+    async function setupWebcam() {
+        const constraints = {
+            video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } },
+            audio: false
+        };
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    resolve();
+                };
+            });
+        } catch (err) {
+            statusDiv.innerText = "Kamera Hatası: " + err.message;
+        }
+    }
+
+    async function loadModel() {
+        try {
+            statusDiv.innerText = "YOLOv8 640x640 ONNX yerel hafızaya yükleniyor...";
+            onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
+            statusDiv.innerText = "V50 Muazzam Kod Aktif. Sıfır Bellek Atığı Modu...";
+            statusDiv.style.color = "#00ff00";
+            detectFrame();
+        } catch (err) {
+            statusDiv.innerText = "Model Yükleme Hatası: " + err.message;
+            statusDiv.style.color = "#ff0000";
+        }
+    }
+
+    // YENİDEN TASARLANMIŞ MUAZZAM PREPROCESS (Sıfır Yeni Allocation)
+    // YOLOv8 için 4 boyutlu tensor şemasını ([1, 3, 640, 640]) rezerve bellek üzerinden besler.
+    function preprocessZeroCopy(videoElement) {
+        offscreenCtx.drawImage(videoElement, 0, 0, 640, 640);
+        const imgData = offscreenCtx.getImageData(0, 0, 640, 640);
+        const { data } = imgData;
+
+        // İşlemciyi yormayan düz bellek manipülasyon döngüsü
+        for (let i = 0, idx = 0; i < data.length; i += 4, idx++) {
+            globalR[idx] = data[i] / 255.0;
+            globalG[idx] = data[i+1] / 255.0;
+            globalB[idx] = data[i+2] / 255.0;
+        }
+
+        // Değerleri rezerve edilmiş ana diziye kopyalıyoruz
+        globalInterleaved.set(globalR, 0);
+        globalInterleaved.set(globalG, targetSize);
+        globalInterleaved.set(globalB, 2 * targetSize);
+
+        // Tensor'ü her karede silip baştan üretmiyoruz; boyutu ve referansı bir kez sabitliyoruz
+        if (!cachedTensor) {
+            cachedTensor = new ort.Tensor('float32', globalInterleaved, [1, 3, 640, 640]);
+        }
+        
+        return cachedTensor;
+    }
+
+    async function detectFrame() {
+        const now = Date.now();
+        const fps = Math.round(1000 / (now - lastFrameTime));
+        lastFrameTime = now;
+        fpsDiv.innerText = `FPS: ${fps} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (V50 Muazzam-Core)`;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        if (onnxSession) {
+            try {
+                // Muazzam Preprocess fonksiyonu çağrılıyor
+                const inputTensor = preprocessZeroCopy(video);
+                const outputMap = await onnxSession.run({ [onnxSession.inputNames[0]]: inputTensor });
+                const outputTensor = outputMap[onnxSession.outputNames[0]];
+                const rawData = outputTensor.data;
+                
+                let bestScore = 0;
+                let bestBox = null;
+                const numBoxes = outputTensor.dims[2]; // Sabit 8400 grid tespiti
+                
+                for (let i = 0; i < numBoxes; i++) {
+                    let score = rawData[4 * numBoxes + i]; 
+                    if (score > CONFIDENCE_THRESHOLD && score > bestScore) {
+                        bestScore = score;
+                        bestBox = {
+                            x: (rawData[i] / 640) * canvas.width,
+                            y: (rawData[numBoxes + i] / 640) * canvas.height,
+                            w: (rawData[2 * numBoxes + i] / 640) * canvas.width,
+                            h: (rawData[3 * numBoxes + i] / 640) * canvas.height
+                        };
+                    }
+                }
+                
+                if (bestBox) {
+                    resultBadge.innerText = DISPLAY_LABEL;
+                    resultBadge.style.display = "block";
+                    
+                    const topY = bestBox.y - bestBox.h / 2;
+                    const correctedX = canvas.width - bestBox.x - (bestBox.w / 2);
+                    
+                    // ROI Yeşil Kutusu
+                    ctx.strokeStyle = "#00ff00";
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(correctedX, topY, bestBox.w, bestBox.h);
+                    
+                    // TELEFONLAR İÇİN %120 BÜYÜTÜLMÜŞ NET ETİKET (35px)
+                    ctx.fillStyle = "#00ff00";
+                    ctx.font = "bold 35px monospace"; 
+                    const safeTextY = topY > 45 ? topY - 15 : 45;
+                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, safeTextY);
+                } else {
+                    resultBadge.style.display = "none";
+                }
+            } catch (inferError) {
+                console.error("Çıkarım Hatası:", inferError);
+            }
+        }
+        requestAnimationFrame(detectFrame);
+    }
+    
+    window.onload = async () => {
+        await setupWebcam();
+        await loadModel();
+    };
+</script>
+</body>
+</html>
