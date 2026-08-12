@@ -1,13 +1,14 @@
 <!--* 
-  * Versiyon 51.1 - YOLOv8 ONNX Runtime Web (Part 1/2)
-  * Strateji: Bellek sızıntısını önlemek ve sessiz çöküşü bitirmek için her karede taze Tensor üretimi ve dispose() yönetimi.
+  * Versiyon 51.2 - YOLOv8 ONNX Runtime Web Kararlı Çekirdek (Part 1/2)
+  * Düzeltme: Tensor boyutu `[1, 3, 640, 640]` dizisiyle kesin olarak kilitlendi.
+  * Optimizasyon: Taze bellek üretimi, otomatik imha (dispose) ve kilit mekanizması.
   *-->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 51.1 (Dispose Sync)</title>
+    <title>Bric Barkod - Versiyon 51.2 (Strict Rank Fix)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -38,14 +39,14 @@
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
     <div id="debug-panel">
-        <div>[BRIC BARKOD V51.1 - DISPOSE MANAGEMENT]</div>
+        <div>[BRIC BARKOD V51.2 - STRICT FIX]</div>
         <div id="fps">AI FPS: --</div>
         <div id="status">Sistem başlatılıyor...</div>
     </div>
     <div id="result-badge">---</div>
 </div>
 
-<script>
+ <script>
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
@@ -100,7 +101,7 @@
         try {
             statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V51.1 Dispose & Sync Aktif...";
+            statusDiv.innerText = "V51.2 Kararlı Çekirdek Aktif...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -124,8 +125,8 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        // Her karede güncel veriyi içeren taze nesne şeması
-        return new ort.Tensor('float32', globalInterleaved,);
+        // KESİN DÜZELTME: [1, 3, 640, 640] boyut dizisi kurallara tam uygun olarak kilitlendi.
+        return new ort.Tensor('float32', globalInterleaved, [1, 3, 640, 640]);
     }
 
     async function detectFrame() {
@@ -138,7 +139,7 @@
 
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
-            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (V51.1 Dispose)`;
+            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (V51.2 Active)`;
             aiFpsCount = 0;
             lastFpsUpdate = now;
         }
@@ -156,7 +157,7 @@
                 aiFpsCount++;
                 let bestScore = 0;
                 let bestBox = null;
-                const numBoxes = outputTensor.dims; 
+                const numBoxes = outputTensor.dims[2]; // YOLOv8 çıktı sütun sayısı (8400)
                 
                 for (let i = 0; i < numBoxes; i++) {
                     let score = rawData[4 * numBoxes + i]; 
@@ -171,7 +172,7 @@
                     }
                 }
                 
-                // Bellek temizliği (İmha Etme)
+                // Çıktı matris belleğini temizle
                 if (outputTensor && typeof outputTensor.dispose === 'function') {
                     outputTensor.dispose();
                 }
@@ -197,7 +198,7 @@
             } catch (inferError) {
                 console.error("Çıkarım Hatası:", inferError);
             } finally {
-                // Girdi Tensor nesnesini de güvenle imha et
+                // Girdi Tensor nesnesini imha et
                 if (inputTensor && typeof inputTensor.dispose === 'function') {
                     inputTensor.dispose();
                 }
