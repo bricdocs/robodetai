@@ -1,13 +1,13 @@
 <!--* 
-  * Versiyon 50.3 - YOLOv8 ONNX Runtime Web Core (Part 1/2)
-  * Düzeltme: `images` girdisinin 4 boyutlu matris şeması () olarak eksiksiz tanımı yapıldı.
+  * Versiyon 50.4 - YOLOv8 ONNX Runtime Web Core (Part 1/2)
+  * Düzeltme: Tensor boyut tanımı [1, 3, 640, 640] tam ve hatasız olarak kilitlendi.
   *-->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 50.3 (Tensor Fix)</title>
+    <title>Bric Barkod - Versiyon 50.4 (Tensor Shape Fix)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -38,7 +38,7 @@
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
     <div id="debug-panel">
-        <div>[BRIC BARKOD V50.3 - TENSOR RANK FIX]</div>
+        <div>[BRIC BARKOD V50.4 - SHAPE FIX]</div>
         <div id="fps">AI FPS: --</div>
         <div id="status">Sistem başlatılıyor...</div>
     </div>
@@ -102,7 +102,7 @@
         try {
             statusDiv.innerText = "YOLOv8 640x640 ONNX yerel hafızaya yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V50.3 Tensor Rank Düzeltmesi Aktif...";
+            statusDiv.innerText = "V50.4 Tensor Boyut Hatası Giderildi...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -126,9 +126,9 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        // KESİN ÇÖZÜM: YOLOv8 modelinin kesin olarak talep ettiği 4 boyutlu tensor dizilimini sabitliyoruz
+        // KESİN DÜZELTME: [1, 3, 640, 640] boyut dizisi açıkça eklendi
         if (!cachedTensor) {
-            cachedTensor = new ort.Tensor('float32', globalInterleaved,);
+            cachedTensor = new ort.Tensor('float32', globalInterleaved, [1, 3, 640, 640]);
         }
         return cachedTensor;
     }
@@ -143,7 +143,7 @@
 
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
-            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (V50.3 Fix)`;
+            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (V50.4 Fix)`;
             aiFpsCount = 0;
             lastFpsUpdate = now;
         }
