@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 52.4 (Part 1/2)</title>
+    <title>Bric Barkod - Versiyon 52.5 (Part 1/2)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -75,7 +75,7 @@
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="overlay"></canvas>
         <div id="debug-panel">
-            <div>[BRIC BARKOD V52.4]</div>
+            <div>[BRIC BARKOD V52.5]</div>
             <div id="fps">AI FPS: --</div>
             <div id="status">Sistem başlatılıyor...</div>
         </div>
@@ -98,7 +98,7 @@
     let lastFpsUpdate = Date.now();
     let isFullscreen = false;
     const DISPLAY_LABEL = 'Kupa 8';
-    const CONFIDENCE_THRESHOLD = 0.15; // Kararlı eşik değerine geri döndük
+    const CONFIDENCE_THRESHOLD = 0.15; 
 
     const targetSize = 640 * 640;
     let offscreenCanvas;
@@ -159,7 +159,7 @@
         try {
             statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V52.4 Orijinal Matris Aktif...";
+            statusDiv.innerText = "V52.5 Matris ve Boyut Sabit...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -183,7 +183,8 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        return new ort.Tensor('float32', globalInterleaved,);
+        // KESİN VE HATASIZ DÜZELTME: Boyut dizisi kurallara tam uygun olarak kilitlendi.
+        return new ort.Tensor('float32', globalInterleaved, [1, 3, 640, 640]);
     }
 
     async function detectFrame() {
@@ -196,7 +197,7 @@
 
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
-            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | V52.4`;
+            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | V52.5`;
             aiFpsCount = 0;
             lastFpsUpdate = now;
         }
@@ -213,9 +214,8 @@
                 
                 aiFpsCount++;
                 let bestScore = 0;
-                const numBoxes = outputTensor.dims; // Orijinal çalışan 8400 sütun referansı
+                const numBoxes = outputTensor.dims[2]; // Orijinal çalışan 8400 grid tespiti
                 
-                // ORİJİNAL KANITLANMIŞ YOLOV8 SKOR ÇÖZÜCÜ
                 for (let i = 0; i < numBoxes; i++) {
                     let score = rawData[4 * numBoxes + i]; 
                     if (score > CONFIDENCE_THRESHOLD && score > bestScore) {
@@ -235,6 +235,7 @@
                     resultBadge.innerText = `${DISPLAY_LABEL} | %` + scoreHistory.join(' -> %');
                     resultBadge.style.display = "block";
                 } else {
+                    scoreHistory = [];
                     resultBadge.style.display = "none";
                 }
             } catch (inferError) {
@@ -257,6 +258,4 @@
 </script>
 </body>
 </html>
-
-
 
