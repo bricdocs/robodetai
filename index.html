@@ -1,9 +1,13 @@
+<!--* 
+  * Versiyon 51.3 - YOLOv8 ONNX Runtime Web (Part 1/2)
+  * Analiz: ROI kutusu kaldırıldı, son 5 anlık skor alt rozete taşındı.
+  *-->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 51.3 (Score History)</title>
+    <title>Bric Barkod - Versiyon 51.3 (Score History - Part 1)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -36,10 +40,11 @@
     <div id="debug-panel">
         <div>[BRIC BARKOD V51.3 - 5 SCORE HISTORY]</div>
         <div id="fps">AI FPS: --</div>
-        <div id="status">Sistem baslatiliyor...</div>
+        <div id="status">Sistem başlatılıyor...</div>
     </div>
     <div id="result-badge">---</div>
 </div>
+
 <script>
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('overlay');
@@ -89,19 +94,19 @@
                 };
             });
         } catch (err) {
-            statusDiv.innerText = "Kamera Hatasi: " + err.message;
+            statusDiv.innerText = "Kamera Hatası: " + err.message;
         }
     }
 
     async function loadModel() {
         try {
-            statusDiv.innerText = "YOLOv8 ONNX yukleniyor...";
-            onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V51.3 Skor Gecmisi Modu Aktif...";
+            statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
+            onnxSession = await [ort.InferenceSession.create](https://onnxruntime.ai)('./best.onnx', { executionProviders: ['wasm'] });
+            statusDiv.innerText = "V51.3 Skor Geçmişi Modu Aktif...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
-            statusDiv.innerText = "Model Hatasi: " + err.message;
+            statusDiv.innerText = "Model Hatası: " + err.message;
             statusDiv.style.color = "#ff0000";
         }
     }
@@ -121,7 +126,8 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        return new ort.Tensor('float32', globalInterleaved,);
+        // KESİN DÜZELTME: [1, 3, 640, 640] boyut dizisi hatasız eklendi
+        return new [ort.Tensor](https://onnxruntime.ai)('float32', globalInterleaved, [1, 3, 640, 640]);
     }
 
     async function detectFrame() {
@@ -134,7 +140,7 @@
 
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
-            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Resolution: ${video.videoWidth}x${video.videoHeight} (V51.3)`;
+            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Resolution: ${video.videoWidth}x${video.videoHeight} (V51.3 Fixed)`;
             aiFpsCount = 0;
             lastFpsUpdate = now;
         }
@@ -176,7 +182,7 @@
                     resultBadge.style.display = "none";
                 }
             } catch (inferError) {
-                console.error("Cikarim Hatasi:", inferError);
+                console.error("Çıkarım Hatası:", inferError);
             } finally {
                 if (inputTensor && typeof inputTensor.dispose === 'function') {
                     inputTensor.dispose();
