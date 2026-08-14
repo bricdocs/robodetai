@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 51.7 (Threshold 0 Test)</title>
+    <title>Bric Barkod - Versiyon 51.8 (Rank 4 Fixed)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -34,7 +34,7 @@
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
     <div id="debug-panel">
-        <div>[BRIC BARKOD V51.7 - THRESHOLD 0 TEST]</div>
+        <div>[BRIC BARKOD V51.8 - RANK 4 FIXED]</div>
         <div id="fps">AI FPS: --</div>
         <div id="status">Sistem başlatılıyor...</div>
     </div>
@@ -51,7 +51,7 @@
     let aiFpsCount = 0;
     let lastFpsUpdate = Date.now();
     const DISPLAY_LABEL = 'Kupa 8';
-    const CONFIDENCE_THRESHOLD = 0; // KESİN TEST: Sıfıra kilitlendi
+    const CONFIDENCE_THRESHOLD = 0; 
 
     const targetSize = 640 * 640;
     let offscreenCanvas;
@@ -97,7 +97,7 @@
         try {
             statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V51.7 Eşik=0 Testi Aktif...";
+            statusDiv.innerText = "V51.8 Rank 4 Sabitlendi...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -121,7 +121,8 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        return new ort.Tensor('float32', globalInterleaved,);
+        // KESİN ÇÖZÜM: [1, 3, 640, 640] boyut dizisi eklendi
+        return new ort.Tensor('float32', globalInterleaved, [1, 3, 640, 640]);
     }
 
     async function detectFrame() {
@@ -134,7 +135,7 @@
 
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
-            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Resolution: ${video.videoWidth}x${video.videoHeight} (V51.7)`;
+            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Resolution: ${video.videoWidth}x${video.videoHeight} (V51.8)`;
             aiFpsCount = 0;
             lastFpsUpdate = now;
         }
