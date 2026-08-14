@@ -159,7 +159,7 @@
         try {
             statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V52.1 Kararlı Çekirdek Aktif...";
+            statusDiv.innerText = "V52.2 Rank Kilitlendi Aktif...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -183,7 +183,8 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        return new ort.Tensor('float32', globalInterleaved);
+        // KESİN ÇÖZÜM: [1, 3, 640, 640] boyut dizisi tekrar eklendi
+        return new ort.Tensor('float32', globalInterleaved, [1, 3, 640, 640]);
     }
 
     async function detectFrame() {
@@ -196,7 +197,7 @@
 
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
-            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | V52.1`;
+            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | V52.2`;
             aiFpsCount = 0;
             lastFpsUpdate = now;
         }
@@ -257,3 +258,4 @@
 </script>
 </body>
 </html>
+
