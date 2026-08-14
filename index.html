@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 52.5 (Part 1/2)</title>
+    <title>Bric Barkod - Versiyon 53.0 (Camera Switch)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -40,27 +40,32 @@
         }
         video { 
             width: 100%; height: 100%; object-fit: cover; 
-            position: absolute; top: 0; left: 0; transform: scaleX(-1); 
+            position: absolute; top: 0; left: 0; 
         } 
+        /* Varsayılan olarak ön kamerada ayna efekti aktif */
+        video.mirror-mode { transform: scaleX(-1); }
         canvas { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            z-index: 10; pointer-events: none; transform: scaleX(-1);
+            z-index: 10; pointer-events: none; 
         }
+        canvas.mirror-mode { transform: scaleX(-1); }
         #debug-panel {
             position: absolute; top: 15px; left: 15px; right: 15px;
             background: rgba(0, 0, 0, 0.8); color: #00ff00; padding: 10px;
             border-radius: 8px; font-family: monospace; font-size: 11px; z-index: 20;
             border: 1px solid #00ff00; pointer-events: none;
         }
-        #toggle-btn {
-            margin-top: 15px;
+        .btn-group {
+            display: flex; gap: 10px; margin-top: 15px; z-index: 30;
+        }
+        .ctrl-btn {
             background: #111; color: #00ff00; border: 1px solid #00ff00;
-            padding: 10px 22px; font-weight: bold; font-size: 14px;
-            border-radius: 25px; cursor: pointer; z-index: 30;
+            padding: 10px 18px; font-weight: bold; font-size: 13px;
+            border-radius: 25px; cursor: pointer;
             box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
             transition: background 0.2s, color 0.2s;
         }
-        #toggle-btn:hover { background: #00ff00; color: #000; }
+        .ctrl-btn:hover { background: #00ff00; color: #000; }
         #result-badge {
             position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%);
             background: #00ff00; color: #000; padding: 12px 24px; font-weight: bold;
@@ -72,15 +77,18 @@
 <body>
 <div id="app-wrapper">
     <div id="camera-frame">
-        <video id="webcam" autoplay playsinline muted></video>
-        <canvas id="overlay"></canvas>
+        <video id="webcam" class="mirror-mode" autoplay playsinline muted></video>
+        <canvas id="overlay" class="mirror-mode"></canvas>
         <div id="debug-panel">
-            <div>[BRIC BARKOD V52.5]</div>
+            <div>[BRIC BARKOD V53.0 - CAM SWITCH]</div>
             <div id="fps">AI FPS: --</div>
             <div id="status">Sistem başlatılıyor...</div>
         </div>
     </div>
-    <button id="toggle-btn" onclick="toggleViewMode()">Tam Ekrana Geç</button>
+    <div class="btn-group">
+        <button class="ctrl-btn" id="toggle-btn" onclick="toggleViewMode()">Tam Ekrana Geç</button>
+        <button class="ctrl-btn" onclick="switchCamera()">Kamera Değiştir</button>
+    </div>
 </div>
 <div id="result-badge">---</div>
 
@@ -97,6 +105,8 @@
     let aiFpsCount = 0;
     let lastFpsUpdate = Date.now();
     let isFullscreen = false;
+    let useFrontCamera = true;
+    let currentStream = null;
     const DISPLAY_LABEL = 'Kupa 8';
     const CONFIDENCE_THRESHOLD = 0.15; 
 
@@ -134,15 +144,34 @@
             canvas.height = video.videoHeight || window.innerHeight;
         }, 50);
     }
- 
+
     async function setupWebcam() {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+        }
         const constraints = {
-            video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } },
+            video: { 
+                facingMode: useFrontCamera ? "user" : "environment", 
+                width: { ideal: 1280 }, 
+                height: { ideal: 720 }, 
+                frameRate: { ideal: 60 } 
+            },
             audio: false
         };
         try {
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            currentStream = stream;
             video.srcObject = stream;
+            
+            // Ön kamerada ayna efektini aç, arka kamerada kapat
+            if (useFrontCamera) {
+                video.classList.add('mirror-mode');
+                canvas.classList.add('mirror-mode');
+            } else {
+                video.classList.remove('mirror-mode');
+                canvas.classList.remove('mirror-mode');
+            }
+
             return new Promise((resolve) => {
                 video.onloadedmetadata = () => {
                     canvas.width = video.videoWidth;
@@ -155,11 +184,17 @@
         }
     }
 
+    async function switchCamera() {
+        useFrontCamera = !useFrontCamera;
+        statusDiv.innerText = useFrontCamera ? "Ön kameraya geçiliyor..." : "Arka kameraya geçiliyor...";
+        await setupWebcam();
+    }
+
     async function loadModel() {
         try {
             statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V52.5 Matris ve Boyut Sabit...";
+            statusDiv.innerText = "V53.0 Kamera Geçiş Modu Aktif...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -183,8 +218,7 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        // KESİN VE HATASIZ DÜZELTME: Boyut dizisi kurallara tam uygun olarak kilitlendi.
-        return new ort.Tensor('float32', globalInterleaved, [1, 3, 640, 640]);
+        return new ort.Tensor('float32', globalInterleaved,);
     }
 
     async function detectFrame() {
@@ -197,7 +231,7 @@
 
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
-            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | V52.5`;
+            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | V53.0`;
             aiFpsCount = 0;
             lastFpsUpdate = now;
         }
@@ -214,7 +248,7 @@
                 
                 aiFpsCount++;
                 let bestScore = 0;
-                const numBoxes = outputTensor.dims[2]; // Orijinal çalışan 8400 grid tespiti
+                const numBoxes = outputTensor.dims; 
                 
                 for (let i = 0; i < numBoxes; i++) {
                     let score = rawData[4 * numBoxes + i]; 
@@ -258,4 +292,3 @@
 </script>
 </body>
 </html>
-
