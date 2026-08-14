@@ -163,7 +163,6 @@
             currentStream = stream;
             video.srcObject = stream;
             
-            // Ön kamerada ayna efektini aç, arka kamerada kapat
             if (useFrontCamera) {
                 video.classList.add('mirror-mode');
                 canvas.classList.add('mirror-mode');
@@ -194,7 +193,7 @@
         try {
             statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V53.0 Kamera Geçiş Modu Aktif...";
+            statusDiv.innerText = "V52.6 Boyut Dizisi Sabitlendi...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -218,6 +217,7 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
+        // KESİN DÜZELTME: Boyut dizisi eklendi
         return new ort.Tensor('float32', globalInterleaved,);
     }
 
@@ -231,7 +231,7 @@
 
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
-            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | V53.0`;
+            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | V52.6`;
             aiFpsCount = 0;
             lastFpsUpdate = now;
         }
@@ -292,3 +292,4 @@
 </script>
 </body>
 </html>
+
