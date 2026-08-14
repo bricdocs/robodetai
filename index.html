@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 52.1 (Syntax Fixed)</title>
+    <title>Bric Barkod - Versiyon 52.1 (Part 1/2)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -16,6 +16,10 @@
             font-family: sans-serif; display: flex; flex-direction: column; 
             align-items: center; justify-content: center; 
         }
+        #app-wrapper {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            width: 100%; height: 100%; position: relative; transition: all 0.3s ease;
+        }
         #camera-frame {
             position: relative; 
             width: min(85vw, 450px); 
@@ -25,6 +29,14 @@
             box-shadow: 0 0 30px rgba(0, 255, 0, 0.2);
             border: 2px solid #333;
             background: #000;
+            transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
+        }
+        #app-wrapper.fullscreen-mode #camera-frame {
+            width: 100% !important;
+            height: 100% !important;
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
         }
         video { 
             width: 100%; height: 100%; object-fit: cover; 
@@ -40,26 +52,36 @@
             border-radius: 8px; font-family: monospace; font-size: 11px; z-index: 20;
             border: 1px solid #00ff00; pointer-events: none;
         }
+        #toggle-btn {
+            margin-top: 15px;
+            background: #111; color: #00ff00; border: 1px solid #00ff00;
+            padding: 10px 22px; font-weight: bold; font-size: 14px;
+            border-radius: 25px; cursor: pointer; z-index: 30;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+            transition: background 0.2s, color 0.2s;
+        }
+        #toggle-btn:hover { background: #00ff00; color: #000; }
         #result-badge {
-            position: fixed; bottom: 35px; left: 50%; transform: translateX(-50%);
-            background: #00ff00; color: #000; padding: 14px 25px; font-weight: bold;
-            font-size: 16px; border-radius: 50px; z-index: 30; display: none;
+            position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%);
+            background: #00ff00; color: #000; padding: 12px 24px; font-weight: bold;
+            font-size: 16px; border-radius: 50px; z-index: 40; display: none;
             box-shadow: 0 0 20px #00ff00; text-align: center; white-space: nowrap;
         }
     </style>
 </head>
 <body>
-
-<div id="camera-frame">
-    <video id="webcam" autoplay playsinline muted></video>
-    <canvas id="overlay"></canvas>
-    <div id="debug-panel">
-        <div>[BRIC BARKOD V52.1 - FIXED]</div>
-        <div id="fps">AI FPS: --</div>
-        <div id="status">Sistem başlatılıyor...</div>
+<div id="app-wrapper">
+    <div id="camera-frame">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div id="debug-panel">
+            <div>[BRIC BARKOD V52.1]</div>
+            <div id="fps">AI FPS: --</div>
+            <div id="status">Sistem başlatılıyor...</div>
+        </div>
     </div>
+    <button id="toggle-btn" onclick="toggleViewMode()">Tam Ekrana Geç</button>
 </div>
-
 <div id="result-badge">---</div>
 
 <script>
@@ -69,9 +91,12 @@
     const statusDiv = document.getElementById('status');
     const fpsDiv = document.getElementById('fps');
     const resultBadge = document.getElementById('result-badge');
+    const appWrapper = document.getElementById('app-wrapper');
+    const toggleBtn = document.getElementById('toggle-btn');
     let onnxSession = null;
     let aiFpsCount = 0;
     let lastFpsUpdate = Date.now();
+    let isFullscreen = false;
     const DISPLAY_LABEL = 'Kupa 8';
     const CONFIDENCE_THRESHOLD = 0.15; 
 
@@ -94,6 +119,21 @@
     let isProcessing = false;
     let scoreHistory = [];
     const MAX_HISTORY = 5;
+
+    function toggleViewMode() {
+        isFullscreen = !isFullscreen;
+        if (isFullscreen) {
+            appWrapper.classList.add('fullscreen-mode');
+            toggleBtn.innerText = '1:1 Kare Mode Dön';
+        } else {
+            appWrapper.classList.remove('fullscreen-mode');
+            toggleBtn.innerText = 'Tam Ekrana Geç';
+        }
+        setTimeout(() => {
+            canvas.width = video.videoWidth || window.innerWidth;
+            canvas.height = video.videoHeight || window.innerHeight;
+        }, 50);
+    }
  
     async function setupWebcam() {
         const constraints = {
@@ -119,7 +159,7 @@
         try {
             statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V52.1 Kare Çekirdek Aktif...";
+            statusDiv.innerText = "V52.1 Kararlı Çekirdek Aktif...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -143,8 +183,7 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        // KESİN DÜZELTME: Boyut dizisi kurallara tam uygun şekilde eklendi
-        return new ort.Tensor('float32', globalInterleaved, [1, 3, 640, 640]);
+        return new ort.Tensor('float32', globalInterleaved);
     }
 
     async function detectFrame() {
@@ -174,7 +213,7 @@
                 
                 aiFpsCount++;
                 let bestScore = 0;
-                const numBoxes = outputTensor.dims[2]; 
+                const numBoxes = outputTensor.dims; 
                 
                 for (let i = 0; i < numBoxes; i++) {
                     let score = rawData[4 * numBoxes + i]; 
