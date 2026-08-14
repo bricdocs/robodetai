@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 53.0 (Camera Switch)</title>
+    <title>Bric Barkod - Versiyon 52.6 (Camera Switch)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -80,7 +80,7 @@
         <video id="webcam" class="mirror-mode" autoplay playsinline muted></video>
         <canvas id="overlay" class="mirror-mode"></canvas>
         <div id="debug-panel">
-            <div>[BRIC BARKOD V53.0 - CAM SWITCH]</div>
+            <div>[BRIC BARKOD V52.6 - CAM SWITCH]</div>
             <div id="fps">AI FPS: --</div>
             <div id="status">Sistem başlatılıyor...</div>
         </div>
@@ -193,7 +193,7 @@
         try {
             statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V52.6 Boyut Dizisi Sabitlendi...";
+            statusDiv.innerText = "V52.6 Tam Boyut Düzeltildi...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -217,7 +217,7 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        // KESİN DÜZELTME: Boyut dizisi eklendi
+        // KESİN ÇÖZÜM: 4 boyutlu dizi parantez içine eklendi
         return new ort.Tensor('float32', globalInterleaved,);
     }
 
@@ -292,4 +292,5 @@
 </script>
 </body>
 </html>
+
 
