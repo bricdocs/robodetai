@@ -1,9 +1,14 @@
+<!--* 
+  * Versiyon 51.2 - YOLOv8 ONNX Runtime Web Kararlı Çekirdek (Part 1/2)
+  * Düzeltme: Tensor boyutu `[1, 3, 640, 640]` dizisiyle kesin olarak kilitlendi.
+  * Optimizasyon: Taze bellek üretimi, otomatik imha (dispose) ve kilit mekanizması.
+  *-->
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bric Barkod - Versiyon 51.8 (Rank 4 Fixed)</title>
+    <title>Bric Barkod - Versiyon 51.2 (Strict Rank Fix)</title>
     <script>
         var onnx_part1 = "" + "cdn.js" + "delivr.net/npm/";
         var onnx_part2 = "onnxru" + "ntime-web@1.17.1/dist/ort.m" + "in.js";
@@ -23,9 +28,9 @@
         }
         #result-badge {
             position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: #ffcc00; color: #000; padding: 12px 25px; font-weight: bold;
-            font-size: 18px; border-radius: 50px; z-index: 20; display: block;
-            box-shadow: 0 0 20px #ffcc00; text-align: center; white-space: nowrap;
+            background: #00ff00; color: #000; padding: 15px 30px; font-weight: bold;
+            font-size: 24px; border-radius: 50px; z-index: 20; display: none;
+            box-shadow: 0 0 20px #00ff00; text-transform: uppercase;
         }
     </style>
 </head>
@@ -34,13 +39,14 @@
     <video id="webcam" autoplay playsinline muted></video>
     <canvas id="overlay"></canvas>
     <div id="debug-panel">
-        <div>[BRIC BARKOD V51.8 - RANK 4 FIXED]</div>
+        <div>[BRIC BARKOD V51.2 - STRICT FIX]</div>
         <div id="fps">AI FPS: --</div>
         <div id="status">Sistem başlatılıyor...</div>
     </div>
-    <div id="result-badge">Test Bekleniyor...</div>
+    <div id="result-badge">---</div>
 </div>
-<script>
+
+ <script>
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
@@ -51,7 +57,7 @@
     let aiFpsCount = 0;
     let lastFpsUpdate = Date.now();
     const DISPLAY_LABEL = 'Kupa 8';
-    const CONFIDENCE_THRESHOLD = 0; 
+    const CONFIDENCE_THRESHOLD = 0.15; 
 
     const targetSize = 640 * 640;
     let offscreenCanvas;
@@ -70,8 +76,6 @@
     const globalInterleaved = new Float32Array(1 * 3 * targetSize);
 
     let isProcessing = false;
-    let scoreHistory = [];
-    const MAX_HISTORY = 5;
  
     async function setupWebcam() {
         const constraints = {
@@ -97,7 +101,7 @@
         try {
             statusDiv.innerText = "YOLOv8 ONNX yükleniyor...";
             onnxSession = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
-            statusDiv.innerText = "V51.8 Rank 4 Sabitlendi...";
+            statusDiv.innerText = "V51.2 Kararlı Çekirdek Aktif...";
             statusDiv.style.color = "#00ff00";
             detectFrame();
         } catch (err) {
@@ -121,7 +125,7 @@
         globalInterleaved.set(globalG, targetSize);
         globalInterleaved.set(globalB, 2 * targetSize);
 
-        // KESİN ÇÖZÜM: [1, 3, 640, 640] boyut dizisi eklendi
+        // KESİN DÜZELTME: [1, 3, 640, 640] boyut dizisi kurallara tam uygun olarak kilitlendi.
         return new ort.Tensor('float32', globalInterleaved, [1, 3, 640, 640]);
     }
 
@@ -135,7 +139,7 @@
 
         const now = Date.now();
         if (now - lastFpsUpdate >= 1000) {
-            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Resolution: ${video.videoWidth}x${video.videoHeight} (V51.8)`;
+            fpsDiv.innerText = `AI FPS: ${aiFpsCount} | Çözünürlük: ${video.videoWidth}x${video.videoHeight} (V51.2 Active)`;
             aiFpsCount = 0;
             lastFpsUpdate = now;
         }
@@ -152,28 +156,49 @@
                 
                 aiFpsCount++;
                 let bestScore = 0;
-                const numBoxes = outputTensor.dims; 
+                let bestBox = null;
+                const numBoxes = outputTensor.dims[2]; // YOLOv8 çıktı sütun sayısı (8400)
                 
                 for (let i = 0; i < numBoxes; i++) {
                     let score = rawData[4 * numBoxes + i]; 
-                    if (score >= CONFIDENCE_THRESHOLD && score > bestScore) {
+                    if (score > CONFIDENCE_THRESHOLD && score > bestScore) {
                         bestScore = score;
+                        bestBox = {
+                            x: (rawData[i] / 640) * canvas.width,
+                            y: (rawData[numBoxes + i] / 640) * canvas.height,
+                            w: (rawData[2 * numBoxes + i] / 640) * canvas.width,
+                            h: (rawData[3 * numBoxes + i] / 640) * canvas.height
+                        };
                     }
                 }
                 
+                // Çıktı matris belleğini temizle
                 if (outputTensor && typeof outputTensor.dispose === 'function') {
                     outputTensor.dispose();
                 }
 
-                scoreHistory.push(Math.round(bestScore * 100));
-                if (scoreHistory.length > MAX_HISTORY) {
-                    scoreHistory.shift();
+                if (bestBox) {
+                    resultBadge.innerText = DISPLAY_LABEL;
+                    resultBadge.style.display = "block";
+                    
+                    const topY = bestBox.y - bestBox.h / 2;
+                    const correctedX = canvas.width - bestBox.x - (bestBox.w / 2);
+                    
+                    ctx.strokeStyle = "#00ff00";
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(correctedX, topY, bestBox.w, bestBox.h);
+                    
+                    ctx.fillStyle = "#00ff00";
+                    ctx.font = "bold 35px monospace"; 
+                    const safeTextY = topY > 45 ? topY - 15 : 45;
+                    ctx.fillText(`${DISPLAY_LABEL} (%${Math.round(bestScore * 100)})`, correctedX, safeTextY);
+                } else {
+                    resultBadge.style.display = "none";
                 }
-                resultBadge.innerText = `${DISPLAY_LABEL} | MaxRaw: %` + Math.round(bestScore * 100) + " | " + scoreHistory.join(' -> %');
-
             } catch (inferError) {
                 console.error("Çıkarım Hatası:", inferError);
             } finally {
+                // Girdi Tensor nesnesini imha et
                 if (inputTensor && typeof inputTensor.dispose === 'function') {
                     inputTensor.dispose();
                 }
